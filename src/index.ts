@@ -222,8 +222,7 @@ export async function findWithProjectItems(toolkit: Toolkit) {
  *
  * @example
  * ```typescript
- * const toolkit = new Toolkit();
- * await setStatusInProjects(toolkit, { toStatus: 'In Progress', fromStatus: 'Done' });
+ * await setStatusInProjects({ github, context, core, exec, glob, io, fetch }, { toStatus: 'In Progress', fromStatus: 'Done' });
  * ```
  */
 export async function setStatusInProjects(toolkit: Toolkit, props: { toStatus: string, fromStatus?: string | RegExp }) {

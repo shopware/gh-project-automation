@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/shopware/gh-project-automation/compare/v1.1.0...v1.1.1) (2025-03-14)
+
+
+### Bug Fixes
+
+* return project items correctly and fix type ([9bc36ac](https://github.com/shopware/gh-project-automation/commit/9bc36ac8f551aa7e109aae6e73e0cea68c2512f4))
+
 ## [1.1.0](https://github.com/shopware/gh-project-automation/compare/v1.0.1...v1.1.0) (2025-03-14)
 
 

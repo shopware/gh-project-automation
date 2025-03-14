@@ -14,7 +14,7 @@ jobs:
       - uses: octo-sts/action@v1.0.0
         id: sts-release
         with:
-          scope: shopware/acceptance-test-suite
+          scope: shopware/gh-project-automation
           identity: release
       - uses: googleapis/release-please-action@v4
         id: release

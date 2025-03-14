@@ -12,10 +12,12 @@ export async function findIssueWithProjectItems(toolkit: Toolkit, number: number
     const res = await toolkit.github.graphql<{
         repository: {
             issue: {
-                projectItems: [{
-                    project: { number: number },
-                    fieldValueByName: { name: string },
-                }],
+                projectItems: {
+                    nodes: [{
+                        project: { number: number },
+                        fieldValueByName: { name: string },
+                    }]
+                },
                 id: string,
                 number: number,
             }
@@ -51,7 +53,7 @@ export async function findIssueWithProjectItems(toolkit: Toolkit, number: number
     return {
         node_id: res.repository.issue.id,
         number: res.repository.issue.number,
-        projectItems: res.repository.issue.projectItems,
+        projectItems: res.repository.issue.projectItems.nodes,
     }
 }
 
@@ -59,10 +61,12 @@ export async function findPRWithProjectItems(toolkit: Toolkit, number: number) {
     const res = await toolkit.github.graphql<{
         repository: {
             pullRequest: {
-                projectItems: [{
-                    project: { number: number },
-                    fieldValueByName: { name: string },
-                }],
+                projectItems: {
+                    nodes: [{
+                        project: { number: number },
+                        fieldValueByName: { name: string },
+                    }]
+                },
                 id: string,
                 number: number,
             }
@@ -98,7 +102,7 @@ export async function findPRWithProjectItems(toolkit: Toolkit, number: number) {
     return {
         node_id: res.repository.pullRequest.id,
         number: res.repository.pullRequest.number,
-        projectItems: res.repository.pullRequest.projectItems,
+        projectItems: res.repository.pullRequest.projectItems.nodes,
     }
 }
 
@@ -254,3 +258,5 @@ export async function setStatusInProjects(toolkit: Toolkit, props: { toStatus: s
         await setFieldValue(toolkit, { projectId: projectInfo.node_id, itemId, fieldId: projectInfo.status_field_id, valueId: toStatusOption.id })
     }
 }
+
+

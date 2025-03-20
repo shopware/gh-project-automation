@@ -8,12 +8,21 @@ type Toolkit = {
     fetch: typeof import('node-fetch')
 }
 
+type Label = {
+    id: string
+    name: string
+    url: string
+    description?: string
+    color: string
+};
+
 export async function findIssueWithProjectItems(toolkit: Toolkit, number: number) {
     const res = await toolkit.github.graphql<{
         repository: {
             issue: {
                 projectItems: {
                     nodes: [{
+                        id: string,
                         project: { number: number },
                         fieldValueByName: { name: string },
                     }]
@@ -28,6 +37,7 @@ export async function findIssueWithProjectItems(toolkit: Toolkit, number: number
             issue(number: $number) {
                 projectItems(first: 20) {
                     nodes {
+                        id
                         project {
                         number
                         }
@@ -133,21 +143,30 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
         organization: {
             projectV2: {
                 id: string,
-                field: {
-                    id: string,
-                    options: [{ id: string, name: string }]
+                fields: {
+                    nodes: [{
+                        id: string,
+                        name: string,
+                        options: [{
+                            id: string,
+                            name: string
+                        }]
+                    }]
                 }
             }
         }
     };
     const res = await toolkit.github.graphql<getProjectInfo>(
-        `query getProjectInfo($organization: String!, $number: Int!) {
-            organization(login: $organization) {
-              projectV2(number: $number) {
-                id
-                field(name: "Status") {
+        `
+        query getProjectInfo($organization: String!, $projectNumber: Int!) {
+          organization(login: $organization) {
+            projectV2(number: $projectNumber) {
+              id
+              fields(first: 20) {
+                nodes {
                   ... on ProjectV2SingleSelectField {
                     id
+                    name
                     options {
                       id
                       name
@@ -157,7 +176,8 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
               }
             }
           }
-          `,
+        }
+        `,
         {
             organization: data.organization ?? "shopware",
             number: data.number,
@@ -170,8 +190,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
 
     return {
         node_id: project.id,
-        status_field_id: project.field.id,
-        status_options: project.field.options
+        fields: project.fields.nodes,
     }
 }
 
@@ -184,7 +203,7 @@ export async function addProjectItem(toolkit: Toolkit, data: { projectId: string
             }) {
                 item {
                     id
-                } 
+                }
             }
         }
         `,
@@ -235,7 +254,8 @@ export async function setStatusInProjects(toolkit: Toolkit, props: { toStatus: s
     for (const i in issue.projectItems) {
         const item = issue.projectItems[i];
         const projectInfo = await getProjectInfo(toolkit, { number: item.project.number })
-        const toStatusOption = projectInfo.status_options.find(x => x.name.toLowerCase() === props.toStatus.toLowerCase())
+        const statusField = projectInfo.fields.find(field => field.name == "Status");
+        const toStatusOption = statusField?.options.find(x => x.name.toLowerCase() === props.toStatus.toLowerCase())
 
         if (!toStatusOption) {
             toolkit.core.debug(`Option "${props.toStatus}" not found in project ${item.project.number}`)
@@ -255,8 +275,56 @@ export async function setStatusInProjects(toolkit: Toolkit, props: { toStatus: s
         toolkit.core.info(`get item in project ${item.project.number} for issue/pr ${issue.number}`)
         const itemId = (await addProjectItem(toolkit, { projectId: projectInfo.node_id, issueId: issue.node_id })).node_id
 
-        await setFieldValue(toolkit, { projectId: projectInfo.node_id, itemId, fieldId: projectInfo.status_field_id, valueId: toStatusOption.id })
+        await setFieldValue(toolkit, { projectId: projectInfo.node_id, itemId, fieldId: statusField!.id, valueId: toStatusOption.id })
     }
 }
 
+export async function syncPriorities(toolkit: Toolkit) {
+    const FRAMEWORK_GROUP_PROJECT_NUMBER = 27;
 
+    const issue = toolkit.context.payload.issue!;
+    toolkit.core.debug(`Issue node ID: ${issue.node_id}`);
+
+    const issueWithProjectItems = await findIssueWithProjectItems(toolkit, issue.number);
+    const projectCard = issueWithProjectItems.projectItems.find(projectItem => projectItem.project.number == FRAMEWORK_GROUP_PROJECT_NUMBER);
+    if (!projectCard) {
+        toolkit.core.info("Issue is not part of the Framework Group project");
+        return;
+    }
+
+    const priorityLabel = issue.labels.find((label: Label) =>
+        label.name.startsWith("priority/")
+    )?.name;
+
+    if (!priorityLabel) {
+        return;
+    }
+    toolkit.core.info(`Found priority label: ${priorityLabel}`);
+
+    const priority = priorityLabel.split('/')[1];
+    toolkit.core.info(`Priority: ${priority}`);
+
+    const projectInfo = await getProjectInfo(toolkit, { number: FRAMEWORK_GROUP_PROJECT_NUMBER });
+    const priorityField = projectInfo.fields.find(field => field.name == "Priority");
+    const priorityOption = priorityField?.options.find(option => option.name == priority);
+
+    if (!priorityOption) {
+        throw new Error(`Unknown priority "${priority}`);
+    }
+
+    const cardId = projectCard.id;
+
+    if (!cardId) {
+        toolkit.core.warning(`Couldn't find issue ${issue.number} in project with number ${FRAMEWORK_GROUP_PROJECT_NUMBER}`);
+        return;
+    }
+
+    toolkit.core.info(`Setting priority for issue ${issue.number}`);
+
+    await setFieldValue(toolkit, {
+        projectId: projectInfo.node_id,
+        itemId: cardId,
+        fieldId: priorityField!.id,
+        valueId: priorityOption.id
+    });
+}

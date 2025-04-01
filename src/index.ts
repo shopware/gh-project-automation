@@ -16,6 +16,71 @@ type Label = {
     color: string
 };
 
+async function closeIssue(toolkit: Toolkit, issueId: string) {
+    const res = await toolkit.github.graphql(
+        `mutation closeIssue($issueId: ID!) {
+            closeIssue(input: {
+                issueId: $issueId,
+                stateReason:NOT_PLANNED
+            }) {
+                clientMutationId
+            }
+        }`,
+        {
+            issueId: issueId
+        }
+    );
+
+    toolkit.core.debug(`closeIssue response: ${JSON.stringify(res)}`);
+}
+
+export async function getLabelByName(toolkit: Toolkit, repository: string, labelName: string) {
+    const res = await toolkit.github.graphql<{
+        repository: {
+            label?: Label
+        }
+    }>(`
+        query getLabelId($repository: String!, $labelName: String!) {
+           repository(owner: "shopware", name: $repository) {
+             label(name: $labelName) {
+               id
+               name
+               url
+               description
+               color
+             }
+           }
+         }
+    `,
+        {
+            repository: repository,
+            labelName: labelName
+        });
+
+    return res.repository.label;
+}
+
+export async function addLabelToLabelable(toolkit: Toolkit, labelId: string, labelableId: string) {
+    const res = await toolkit.github.graphql<{
+        clientMutationId: string
+    }>(
+        `mutation addLabelToLableable($labelId: ID!, labelableId: ID!) {
+            addLabelsToLabelable(input: {
+                labelIds: [$labelId],
+                labelableId: $labelableId
+            }) {
+                clientMutationId
+            }
+        }`,
+        {
+            labelId: labelId,
+            labelableId: labelableId
+        }
+    );
+
+    toolkit.core.debug(`addLabelToIssue response: ${JSON.stringify(res)}`);
+}
+
 export async function findIssueWithProjectItems(toolkit: Toolkit, number: number) {
     const res = await toolkit.github.graphql<{
         repository: {
@@ -327,4 +392,256 @@ export async function syncPriorities(toolkit: Toolkit) {
         fieldId: priorityField!.id,
         valueId: priorityOption.id
     });
+}
+
+export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, dryRun: boolean) {
+    const DAYS_UNTIL_STALE = 180;
+
+    const now = new Date();
+    now.setDate(now.getDate() - DAYS_UNTIL_STALE);
+    const staleDate = now.toISOString().split('T')[0];
+
+    switch (projectNumber) {
+        case 27: {
+            const query = `
+                query {
+                    search(
+                      type: ISSUE
+                      first: 100
+                      query: "repo:shopware/shopware is:issue state:open project:shopware/27 label:priority/low -label:AboutToClose -label:DoNotClose created:<=$staleDate"
+                    ) {
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
+                      edges {
+                        node {
+                          ... on Issue {
+                            id
+                            title
+                            number
+                            url
+                            parent {
+                              issueType {
+                                name
+                              }
+                            }
+                            labels(first: 20) {
+                              nodes {
+                                name
+                              }
+                            }
+                            projectItems(first: 10) {
+                              nodes {
+                                project {
+                                    number
+                                }
+                                fieldValueByName(name: "Status") {
+                                  ... on ProjectV2ItemFieldSingleSelectValue {
+                                    name
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+              `;
+
+            type QueryReturn = {
+                search: {
+                    pageInfo: {
+                        hasNextPage: boolean,
+                        endCursor: string
+                    },
+                    edges: [
+                        {
+                            node: {
+                                id: string,
+                                title: string,
+                                number: number,
+                                url: string,
+                                parent?: {
+                                    issueType: {
+                                        name: string
+                                    }
+                                },
+                                labels: {
+                                    nodes: [
+                                        {
+                                            name: string
+                                        }
+                                    ]
+                                },
+                                projectItems: {
+                                    nodes: [
+                                        {
+                                            project: {
+                                                number: number
+                                            }
+                                            fieldValueByName: {
+                                                name: string
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                }
+            };
+
+            // replace because GraphQL doesn't support variables in strings...
+            const res = await toolkit.github.graphql<QueryReturn>(query.replace("$staleDate", staleDate), {
+                headers: {
+                    "GraphQL-Features": "issue_types"
+                }
+            });
+
+            const issues = res.search.edges;
+
+            for (const issueNode of issues) {
+                const issue = issueNode.node;
+                const parentIssueType = issue.parent?.issueType.name;
+                const labels = issue.labels.nodes;
+                const priorityLabel = labels.find((label) =>
+                    label.name.startsWith("priority/")
+                )?.name;
+
+                const statusInProject = issue.projectItems.nodes.find((projectItem) => projectItem.project.number == 27)?.fieldValueByName.name;
+
+                if (priorityLabel && (priorityLabel.split('/')[1] === "low" || statusInProject == "Backlog") && parentIssueType != "Epic") {
+                    if (dryRun) {
+                        toolkit.core.info(`Would set "${issue.title}" (${issue.url}) to AboutToClose`);
+                        continue;
+                    }
+                    const aboutToCloseLabel = await getLabelByName(toolkit, "shopware", "AboutToClose");
+                    if (!aboutToCloseLabel) {
+                        throw Error("Couldn't find the AboutToClose label");
+                    }
+                    await addLabelToLabelable(toolkit, issue.id, aboutToCloseLabel.id);
+                }
+            }
+
+            break;
+        }
+        default:
+            throw new Error(`There is no query for the project with the number ${projectNumber}`);
+    }
+}
+
+export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
+    const DAYS_UNTIL_CLOSE = 30;
+
+    const now = new Date();
+    now.setDate(now.getDate() - DAYS_UNTIL_CLOSE);
+    const closeDate = now.toISOString().split('T')[0];
+
+    const query = `
+        query {
+            search(
+              type: ISSUE
+              first: 100
+              query: "repo:shopware/shopware is:issue state:open label:AboutToClose updated:<=$closeDate"
+            ) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              edges {
+                node {
+                  ... on Issue {
+                    id
+                    title
+                    number
+                    url
+                    parent {
+                      issueType {
+                        name
+                      }
+                    }
+                    labels(first: 20) {
+                      nodes {
+                        name
+                      }
+                    }
+                    projectItems(first: 10) {
+                      nodes {
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue {
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+    `;
+
+    type QueryReturn = {
+        search: {
+            pageInfo: {
+                hasNextPage: boolean,
+                endCursor: string
+            },
+            edges: [
+                {
+                    node: {
+                        id: string,
+                        title: string,
+                        number: number,
+                        url: string,
+                        parent?: {
+                            issueType: {
+                                name: string
+                            }
+                        },
+                        labels: {
+                            nodes: [
+                                {
+                                    name: string
+                                }
+                            ]
+                        },
+                        projectItems: {
+                            nodes: [
+                                {
+                                    project: {
+                                        number: number
+                                    }
+                                    fieldValueByName: {
+                                        name: string
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    };
+
+    // replace because GraphQL doesn't support variables in strings...
+    const res = await toolkit.github.graphql<QueryReturn>(query.replace("$closeDate", closeDate), {
+        headers: {
+            "GraphQL-Features": "issue_types"
+        }
+    });
+
+    const issues = res.search.edges;
+
+    for (const issueNode of issues) {
+        const issue = issueNode.node;
+        if (dryRun) {
+            toolkit.core.info(`Would close "${issue.title}" (${issue.url})`);
+            continue;
+        }
+
+        await closeIssue(toolkit, issue.id);
+    }
 }

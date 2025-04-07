@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/shopware/gh-project-automation/compare/v1.1.1...v1.2.0) (2025-04-07)
+
+
+### Features
+
+* add sync issue priority and mark and close stale issues ([#7](https://github.com/shopware/gh-project-automation/issues/7)) ([084ed2a](https://github.com/shopware/gh-project-automation/commit/084ed2ad97d83bcb61e1f2973ca50b45541234ac))
+
 ## [1.1.1](https://github.com/shopware/gh-project-automation/compare/v1.1.0...v1.1.1) (2025-03-14)
 
 

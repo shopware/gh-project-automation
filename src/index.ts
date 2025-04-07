@@ -8,12 +8,86 @@ type Toolkit = {
     fetch: typeof import('node-fetch')
 }
 
+type Label = {
+    id: string
+    name: string
+    url: string
+    description?: string
+    color: string
+};
+
+async function closeIssue(toolkit: Toolkit, issueId: string) {
+    const res = await toolkit.github.graphql(
+        `mutation closeIssue($issueId: ID!) {
+            closeIssue(input: {
+                issueId: $issueId,
+                stateReason:NOT_PLANNED
+            }) {
+                clientMutationId
+            }
+        }`,
+        {
+            issueId: issueId
+        }
+    );
+
+    toolkit.core.debug(`closeIssue response: ${JSON.stringify(res)}`);
+}
+
+export async function getLabelByName(toolkit: Toolkit, repository: string, labelName: string) {
+    const res = await toolkit.github.graphql<{
+        repository: {
+            label?: Label
+        }
+    }>(`
+        query getLabelId($repository: String!, $labelName: String!) {
+           repository(owner: "shopware", name: $repository) {
+             label(name: $labelName) {
+               id
+               name
+               url
+               description
+               color
+             }
+           }
+         }
+    `,
+        {
+            repository: repository,
+            labelName: labelName
+        });
+
+    return res.repository.label;
+}
+
+export async function addLabelToLabelable(toolkit: Toolkit, labelId: string, labelableId: string) {
+    const res = await toolkit.github.graphql<{
+        clientMutationId: string
+    }>(
+        `mutation addLabelToLableable($labelId: ID!, labelableId: ID!) {
+            addLabelsToLabelable(input: {
+                labelIds: [$labelId],
+                labelableId: $labelableId
+            }) {
+                clientMutationId
+            }
+        }`,
+        {
+            labelId: labelId,
+            labelableId: labelableId
+        }
+    );
+
+    toolkit.core.debug(`addLabelToIssue response: ${JSON.stringify(res)}`);
+}
+
 export async function findIssueWithProjectItems(toolkit: Toolkit, number: number) {
     const res = await toolkit.github.graphql<{
         repository: {
             issue: {
                 projectItems: {
                     nodes: [{
+                        id: string,
                         project: { number: number },
                         fieldValueByName: { name: string },
                     }]
@@ -28,6 +102,7 @@ export async function findIssueWithProjectItems(toolkit: Toolkit, number: number
             issue(number: $number) {
                 projectItems(first: 20) {
                     nodes {
+                        id
                         project {
                         number
                         }
@@ -133,21 +208,30 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
         organization: {
             projectV2: {
                 id: string,
-                field: {
-                    id: string,
-                    options: [{ id: string, name: string }]
+                fields: {
+                    nodes: [{
+                        id: string,
+                        name: string,
+                        options: [{
+                            id: string,
+                            name: string
+                        }]
+                    }]
                 }
             }
         }
     };
     const res = await toolkit.github.graphql<getProjectInfo>(
-        `query getProjectInfo($organization: String!, $number: Int!) {
-            organization(login: $organization) {
-              projectV2(number: $number) {
-                id
-                field(name: "Status") {
+        `
+        query getProjectInfo($organization: String!, $projectNumber: Int!) {
+          organization(login: $organization) {
+            projectV2(number: $projectNumber) {
+              id
+              fields(first: 20) {
+                nodes {
                   ... on ProjectV2SingleSelectField {
                     id
+                    name
                     options {
                       id
                       name
@@ -157,7 +241,8 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
               }
             }
           }
-          `,
+        }
+        `,
         {
             organization: data.organization ?? "shopware",
             number: data.number,
@@ -170,8 +255,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
 
     return {
         node_id: project.id,
-        status_field_id: project.field.id,
-        status_options: project.field.options
+        fields: project.fields.nodes,
     }
 }
 
@@ -184,7 +268,7 @@ export async function addProjectItem(toolkit: Toolkit, data: { projectId: string
             }) {
                 item {
                     id
-                } 
+                }
             }
         }
         `,
@@ -235,7 +319,8 @@ export async function setStatusInProjects(toolkit: Toolkit, props: { toStatus: s
     for (const i in issue.projectItems) {
         const item = issue.projectItems[i];
         const projectInfo = await getProjectInfo(toolkit, { number: item.project.number })
-        const toStatusOption = projectInfo.status_options.find(x => x.name.toLowerCase() === props.toStatus.toLowerCase())
+        const statusField = projectInfo.fields.find(field => field.name == "Status");
+        const toStatusOption = statusField?.options.find(x => x.name.toLowerCase() === props.toStatus.toLowerCase())
 
         if (!toStatusOption) {
             toolkit.core.debug(`Option "${props.toStatus}" not found in project ${item.project.number}`)
@@ -255,8 +340,308 @@ export async function setStatusInProjects(toolkit: Toolkit, props: { toStatus: s
         toolkit.core.info(`get item in project ${item.project.number} for issue/pr ${issue.number}`)
         const itemId = (await addProjectItem(toolkit, { projectId: projectInfo.node_id, issueId: issue.node_id })).node_id
 
-        await setFieldValue(toolkit, { projectId: projectInfo.node_id, itemId, fieldId: projectInfo.status_field_id, valueId: toStatusOption.id })
+        await setFieldValue(toolkit, { projectId: projectInfo.node_id, itemId, fieldId: statusField!.id, valueId: toStatusOption.id })
     }
 }
 
+export async function syncPriorities(toolkit: Toolkit) {
+    const FRAMEWORK_GROUP_PROJECT_NUMBER = 27;
 
+    const issue = toolkit.context.payload.issue!;
+    toolkit.core.debug(`Issue node ID: ${issue.node_id}`);
+
+    const issueWithProjectItems = await findIssueWithProjectItems(toolkit, issue.number);
+    const projectCard = issueWithProjectItems.projectItems.find(projectItem => projectItem.project.number == FRAMEWORK_GROUP_PROJECT_NUMBER);
+    if (!projectCard) {
+        toolkit.core.info("Issue is not part of the Framework Group project");
+        return;
+    }
+
+    const priorityLabel = issue.labels.find((label: Label) =>
+        label.name.startsWith("priority/")
+    )?.name;
+
+    if (!priorityLabel) {
+        return;
+    }
+    toolkit.core.info(`Found priority label: ${priorityLabel}`);
+
+    const priority = priorityLabel.split('/')[1];
+    toolkit.core.info(`Priority: ${priority}`);
+
+    const projectInfo = await getProjectInfo(toolkit, { number: FRAMEWORK_GROUP_PROJECT_NUMBER });
+    const priorityField = projectInfo.fields.find(field => field.name == "Priority");
+    const priorityOption = priorityField?.options.find(option => option.name == priority);
+
+    if (!priorityOption) {
+        throw new Error(`Unknown priority "${priority}`);
+    }
+
+    const cardId = projectCard.id;
+
+    if (!cardId) {
+        toolkit.core.warning(`Couldn't find issue ${issue.number} in project with number ${FRAMEWORK_GROUP_PROJECT_NUMBER}`);
+        return;
+    }
+
+    toolkit.core.info(`Setting priority for issue ${issue.number}`);
+
+    await setFieldValue(toolkit, {
+        projectId: projectInfo.node_id,
+        itemId: cardId,
+        fieldId: priorityField!.id,
+        valueId: priorityOption.id
+    });
+}
+
+export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, dryRun: boolean) {
+    const DAYS_UNTIL_STALE = 180;
+
+    const now = new Date();
+    now.setDate(now.getDate() - DAYS_UNTIL_STALE);
+    const staleDate = now.toISOString().split('T')[0];
+
+    switch (projectNumber) {
+        case 27: {
+            const query = `
+                query {
+                    search(
+                      type: ISSUE
+                      first: 100
+                      query: "repo:shopware/shopware is:issue state:open project:shopware/27 label:priority/low -label:AboutToClose -label:DoNotClose created:<=$staleDate"
+                    ) {
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
+                      edges {
+                        node {
+                          ... on Issue {
+                            id
+                            title
+                            number
+                            url
+                            parent {
+                              issueType {
+                                name
+                              }
+                            }
+                            labels(first: 20) {
+                              nodes {
+                                name
+                              }
+                            }
+                            projectItems(first: 10) {
+                              nodes {
+                                project {
+                                    number
+                                }
+                                fieldValueByName(name: "Status") {
+                                  ... on ProjectV2ItemFieldSingleSelectValue {
+                                    name
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+              `;
+
+            type QueryReturn = {
+                search: {
+                    pageInfo: {
+                        hasNextPage: boolean,
+                        endCursor: string
+                    },
+                    edges: [
+                        {
+                            node: {
+                                id: string,
+                                title: string,
+                                number: number,
+                                url: string,
+                                parent?: {
+                                    issueType: {
+                                        name: string
+                                    }
+                                },
+                                labels: {
+                                    nodes: [
+                                        {
+                                            name: string
+                                        }
+                                    ]
+                                },
+                                projectItems: {
+                                    nodes: [
+                                        {
+                                            project: {
+                                                number: number
+                                            }
+                                            fieldValueByName: {
+                                                name: string
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                }
+            };
+
+            // replace because GraphQL doesn't support variables in strings...
+            const res = await toolkit.github.graphql<QueryReturn>(query.replace("$staleDate", staleDate), {
+                headers: {
+                    "GraphQL-Features": "issue_types"
+                }
+            });
+
+            const issues = res.search.edges;
+
+            for (const issueNode of issues) {
+                const issue = issueNode.node;
+                const parentIssueType = issue.parent?.issueType.name;
+                const labels = issue.labels.nodes;
+                const priorityLabel = labels.find((label) =>
+                    label.name.startsWith("priority/")
+                )?.name;
+
+                const statusInProject = issue.projectItems.nodes.find((projectItem) => projectItem.project.number == 27)?.fieldValueByName.name;
+
+                if (priorityLabel && (priorityLabel.split('/')[1] === "low" || statusInProject == "Backlog") && parentIssueType != "Epic") {
+                    if (dryRun) {
+                        toolkit.core.info(`Would set "${issue.title}" (${issue.url}) to AboutToClose`);
+                        continue;
+                    }
+                    const aboutToCloseLabel = await getLabelByName(toolkit, "shopware", "AboutToClose");
+                    if (!aboutToCloseLabel) {
+                        throw Error("Couldn't find the AboutToClose label");
+                    }
+                    await addLabelToLabelable(toolkit, issue.id, aboutToCloseLabel.id);
+                }
+            }
+
+            break;
+        }
+        default:
+            throw new Error(`There is no query for the project with the number ${projectNumber}`);
+    }
+}
+
+export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
+    const DAYS_UNTIL_CLOSE = 30;
+
+    const now = new Date();
+    now.setDate(now.getDate() - DAYS_UNTIL_CLOSE);
+    const closeDate = now.toISOString().split('T')[0];
+
+    const query = `
+        query {
+            search(
+              type: ISSUE
+              first: 100
+              query: "repo:shopware/shopware is:issue state:open label:AboutToClose updated:<=$closeDate"
+            ) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              edges {
+                node {
+                  ... on Issue {
+                    id
+                    title
+                    number
+                    url
+                    parent {
+                      issueType {
+                        name
+                      }
+                    }
+                    labels(first: 20) {
+                      nodes {
+                        name
+                      }
+                    }
+                    projectItems(first: 10) {
+                      nodes {
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue {
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+    `;
+
+    type QueryReturn = {
+        search: {
+            pageInfo: {
+                hasNextPage: boolean,
+                endCursor: string
+            },
+            edges: [
+                {
+                    node: {
+                        id: string,
+                        title: string,
+                        number: number,
+                        url: string,
+                        parent?: {
+                            issueType: {
+                                name: string
+                            }
+                        },
+                        labels: {
+                            nodes: [
+                                {
+                                    name: string
+                                }
+                            ]
+                        },
+                        projectItems: {
+                            nodes: [
+                                {
+                                    project: {
+                                        number: number
+                                    }
+                                    fieldValueByName: {
+                                        name: string
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    };
+
+    // replace because GraphQL doesn't support variables in strings...
+    const res = await toolkit.github.graphql<QueryReturn>(query.replace("$closeDate", closeDate), {
+        headers: {
+            "GraphQL-Features": "issue_types"
+        }
+    });
+
+    const issues = res.search.edges;
+
+    for (const issueNode of issues) {
+        const issue = issueNode.node;
+        if (dryRun) {
+            toolkit.core.info(`Would close "${issue.title}" (${issue.url})`);
+            continue;
+        }
+
+        await closeIssue(toolkit, issue.id);
+    }
+}

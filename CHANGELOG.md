@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/shopware/gh-project-automation/compare/v1.2.0...v1.2.1) (2025-05-06)
+
+
+### Bug Fixes
+
+* convert param to number in markStaleIssues ([#9](https://github.com/shopware/gh-project-automation/issues/9)) ([eb100cf](https://github.com/shopware/gh-project-automation/commit/eb100cfc1f72d0064183348379b77e756d8e962e))
+
 ## [1.2.0](https://github.com/shopware/gh-project-automation/compare/v1.1.1...v1.2.0) (2025-04-07)
 
 

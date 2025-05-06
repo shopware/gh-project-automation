@@ -512,7 +512,7 @@ export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, d
 
                 const statusInProject = issue.projectItems.nodes.find((projectItem) => projectItem.project.number == 27)?.fieldValueByName.name;
 
-                if (priorityLabel && (priorityLabel.split('/')[1] === "low" || statusInProject == "Backlog") && parentIssueType != "Epic") {
+                if (((priorityLabel && priorityLabel.split('/')[1] === "low") || statusInProject == "Backlog") && parentIssueType != "Epic") {
                     if (dryRun) {
                         toolkit.core.info(`Would set "${issue.title}" (${issue.url}) to AboutToClose`);
                         continue;

@@ -401,7 +401,7 @@ export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, d
     now.setDate(now.getDate() - DAYS_UNTIL_STALE);
     const staleDate = now.toISOString().split('T')[0];
 
-    switch (projectNumber) {
+    switch (Number(projectNumber)) {
         case 27: {
             const query = `
                 query {

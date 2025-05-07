@@ -6,7 +6,8 @@
   "scripts": {
     "build": "unbuild",
     "prepack": "unbuild",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "cli": "npx tsx ./src/scripts/cli.ts"
   },
   "exports": {
     ".": {

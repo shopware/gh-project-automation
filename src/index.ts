@@ -645,3 +645,120 @@ export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
         await closeIssue(toolkit, issue.id);
     }
 }
+
+export async function getProjectsByOrg(toolkit: Toolkit, organization: string | null | undefined, count: number | null | undefined) {
+    const res = await toolkit.github.graphql<{
+        organization: {
+            pageInfo: {
+                startCursor: string,
+                endCursor: string,
+                hasPreviousPage: boolean,
+                hasNextPage: boolean
+            }
+            projectsV2: {
+                nodes: [{
+                    number: number,
+                    title: string,
+                    id: string
+                }]
+            }
+        }
+    }>(`
+        query getProjects($organization: String!, $count: Int) {
+          organization(login: $organization) {
+            projectsV2(first: $count) {
+              pageInfo {
+                startCursor
+                endCursor
+                hasPreviousPage
+                hasNextPage
+              }
+              nodes {
+                number
+                title
+                id
+              }
+            }
+          }
+        }
+    `, {
+        organization: organization ?? "shopware",
+        count: count ?? 100
+    });
+
+    return res.organization.projectsV2.nodes;
+}
+
+export async function getProjectIdByNumber(toolkit: Toolkit, organization: string | null | undefined, number: number) {
+    const res = await toolkit.github.graphql<{
+        organization: {
+            projectV2: {
+                id: string
+            }
+        }
+    }>(`
+        query getProjectIdByNumber($organization: String!, $number: Int!) {
+          organization(login: $organization) {
+            projectV2(number: $number) {
+              id
+            }
+          }
+        }
+    `, {
+        organization: organization ?? "shopware",
+        number
+    });
+
+    return res.organization.projectV2.id;
+}
+
+export async function getIssuesByProject(toolkit: Toolkit, projectId: string, count: number | null | undefined) {
+    const res = await toolkit.github.graphql<{
+        node: {
+            pageInfo: {
+                startCursor: string,
+                endCursor: string,
+                hasPreviousPage: boolean,
+                hasNextPage: boolean
+            },
+            items: [{
+                id: string,
+                title: string,
+                number: number,
+                url: string
+            }]
+        }
+    }>(`
+        query getIssuesByProject($projectId: ID!, $count: Int) {
+          node(id: $projectId) {
+            ... on ProjectV2 {
+              items(first: $count) {
+                pageInfo {
+                  startCursor
+                  endCursor
+                  hasPreviousPage
+                  hasNextPage
+                }
+                nodes {
+                  ... on ProjectV2Item {
+                    content {
+                      ... on Issue {
+                        id
+                        title
+                        number
+                        url
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+    `, {
+        projectId,
+        count: count ?? 100
+    });
+
+    return res.node.items;
+}

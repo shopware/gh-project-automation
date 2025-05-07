@@ -714,51 +714,83 @@ export async function getProjectIdByNumber(toolkit: Toolkit, organization: strin
 
 export async function getIssuesByProject(toolkit: Toolkit, projectId: string, count: number | null | undefined) {
     const res = await toolkit.github.graphql<{
+        pageInfo: {
+            startCursor: string,
+            endCursor: string,
+            hasPreviousPage: boolean,
+            hasNextPage: boolean
+        },
         node: {
-            pageInfo: {
-                startCursor: string,
-                endCursor: string,
-                hasPreviousPage: boolean,
-                hasNextPage: boolean
-            },
-            items: [{
-                id: string,
-                title: string,
-                number: number,
-                url: string
-            }]
+            items: {
+                nodes: [{
+                    fieldValueByName: {
+                        name: string
+                    },
+                    content: {
+                        id: string,
+                        title: string,
+                        number: number,
+                        url: string,
+                        issueType?: {
+                            name: string
+                        }
+                    }
+                }]
+            }
         }
     }>(`
         query getIssuesByProject($projectId: ID!, $count: Int) {
-          node(id: $projectId) {
-            ... on ProjectV2 {
-              items(first: $count) {
-                pageInfo {
-                  startCursor
-                  endCursor
-                  hasPreviousPage
-                  hasNextPage
-                }
-                nodes {
-                  ... on ProjectV2Item {
-                    content {
-                      ... on Issue {
-                        id
-                        title
-                        number
-                        url
-                      }
+            node(id: $projectId) {
+                ... on ProjectV2 {
+                    items(first: $count) {
+                        pageInfo {
+                            startCursor
+                            endCursor
+                            hasPreviousPage
+                            hasNextPage
+                        }
+                        nodes {
+                            fieldValueByName(name: "Status") {
+                                ... on ProjectV2ItemFieldSingleSelectValue {
+                                    name
+                                }
+                            }
+                            content {
+                                ... on Issue {
+                                    id
+                                    title
+                                    number
+                                    url
+                                    issueType {
+                                        name
+                                    }
+                                }
+                            }
+                        }
                     }
-                  }
                 }
-              }
             }
-          }
         }
     `, {
         projectId,
         count: count ?? 100
     });
 
-    return res.node.items;
+    return res.node.items.nodes
 }
+
+export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: string, count: number | null | undefined) {
+    const res = await getIssuesByProject(toolkit, projectId, count);
+
+    return res.filter((item) => {
+        return item.fieldValueByName?.name === "In Progress" && item.content?.issueType?.name === "Epic";
+    })
+}
+
+// TODO: (GITHUB) Paginate queries
+
+// TODO: (JIRA) Query for epics
+// TODO: (JIRA) Filter out ones that already have the custom docs label
+// TODO: (JIRA) Try to correlate the the JIRA epic with one of the GitHub epics (e.g. by title, alternatively use the automated IDs: https://shopware.atlassian.net/browse/GS-1384?focusedCommentId=547505)
+
+// TODO: Iterate over all correlated epics and create a docs ticket for each of them

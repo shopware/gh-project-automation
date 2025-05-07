@@ -30,6 +30,9 @@ export async function run(method: string, ...args: string[]) {
         case "getIssuesByProject":
             result = await automation.getIssuesByProject(toolkit, args[0], parseInt(args[1]));
             break;
+        case "getEpicsInProgressByProject":
+            result = await automation.getEpicsInProgressByProject(toolkit, args[0], parseInt(args[1]));
+            break;
         default:
             console.warn("Unknown method");
             break;

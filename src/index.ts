@@ -1,3 +1,5 @@
+import JiraApi from "jira-client";
+
 type Toolkit = {
     github: InstanceType<typeof import('@actions/github/lib/utils.js').GitHub>
     context: import('@actions/github/lib/context.js').Context
@@ -15,6 +17,31 @@ type Label = {
     description?: string
     color: string
 };
+
+type GitHubIssue = {
+    id: string
+    title: string
+    number?: number
+    url?: string
+    status?: string
+    labels: Label[]
+    type?: string
+}
+
+type JiraIssue = {
+    id: string
+    title: string
+    key: string
+    url?: string
+    status?: string
+    labels: string[]
+    type?: string
+}
+
+type CorrelatedIssue = {
+    github: GitHubIssue,
+    jira: JiraIssue
+}
 
 async function closeIssue(toolkit: Toolkit, issueId: string) {
     const res = await toolkit.github.graphql(
@@ -712,7 +739,7 @@ export async function getProjectIdByNumber(toolkit: Toolkit, organization: strin
     return res.organization.projectV2.id;
 }
 
-export async function getIssuesByProject(toolkit: Toolkit, projectId: string, count: number | null | undefined) {
+export async function getIssuesByProject(toolkit: Toolkit, projectId: string, count: number | null | undefined): Promise<GitHubIssue[]> {
     const res = await toolkit.github.graphql<{
         pageInfo: {
             startCursor: string,
@@ -776,21 +803,71 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, co
         count: count ?? 100
     });
 
-    return res.node.items.nodes
+    return res.node.items.nodes.map((item) => {
+        return {
+            id: item.content.id,
+            title: item.content.title,
+            number: item.content.number,
+            url: item.content.url,
+            status: item.fieldValueByName?.name,
+            labels: [],
+            type: item.content?.issueType?.name
+        }
+    });
 }
 
 export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: string, count: number | null | undefined) {
     const res = await getIssuesByProject(toolkit, projectId, count);
 
     return res.filter((item) => {
-        return item.fieldValueByName?.name === "In Progress" && item.content?.issueType?.name === "Epic";
+        return item.status === "In Progress" && item.type === "Epic";
     })
 }
 
+
+export async function correlateGitHubIssueWithJiraEpic(toolkit: Toolkit, jira: JiraApi, issue: GitHubIssue): Promise<CorrelatedIssue | null> {
+    const jiraSearchResult = await jira.searchJira(`issuetype = "Epic" AND (summary ~ "${issue.title}" OR comment ~ "${issue.url}")`, {
+        fields: ["summary", "status", "labels"],
+        maxResults: 1,
+    });
+
+    if (jiraSearchResult.total < 1) {
+        toolkit.core.warning(`No JIRA Epic found for GitHub issue ${issue.title} (${issue.url})`);
+
+        return null;
+    } else {
+        const jiraEpic = jiraSearchResult.issues[0];
+        return {
+            github: issue,
+            jira: {
+                id: jiraEpic.id,
+                key: jiraEpic.key,
+                title: jiraEpic.fields.summary,
+                status: jiraEpic.fields.status.name,
+                url: `https://shopware.atlassian.net/browse/${jiraEpic.key}`,
+                labels: jiraEpic.fields.labels
+            }
+        }
+    }
+}
+
+export async function correlateIssuesForProject(toolkit: Toolkit, jira: JiraApi, projectId: string, count: number | null | undefined) {
+    const githubEpics = await getEpicsInProgressByProject(toolkit, projectId, count);
+
+    const correlatedIssues: CorrelatedIssue[] = [];
+
+    for (const githubEpic of githubEpics) {
+        const correlatedIssue = await correlateGitHubIssueWithJiraEpic(toolkit, jira, githubEpic);
+        if (correlatedIssue) {
+            correlatedIssues.push(correlatedIssue);
+        }
+    }
+
+    return correlatedIssues;
+}
+
+// IDEA: (GITHUB) Cache all Epics; Add a second workflow that's triggered on issue status changes; invalidate cache when an epic is moved to "In Progress"
 // TODO: (GITHUB) Paginate queries
-
-// TODO: (JIRA) Query for epics
+// FIXME: (JIRA) Explore concatenating all GH issues into a large query, using the response afterwards to correlate locally
 // TODO: (JIRA) Filter out ones that already have the custom docs label
-// TODO: (JIRA) Try to correlate the the JIRA epic with one of the GitHub epics (e.g. by title, alternatively use the automated IDs: https://shopware.atlassian.net/browse/GS-1384?focusedCommentId=547505)
-
 // TODO: Iterate over all correlated epics and create a docs ticket for each of them

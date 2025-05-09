@@ -943,16 +943,13 @@ export async function createDocumentationTask(toolkit: Toolkit, jira: JiraApi, i
     toolkit.core.info(`Created documentation task in JIRA: https://shopware.atlassian.net/browse/${docTask.key}`);
 }
 
-export async function createDocumentationTasks(toolkit: Toolkit, jira: JiraApi, issues: CorrelatedIssue[]) {
-    for (const issue of issues) {
-        await createDocumentationTask(toolkit, jira, issue);
+export async function createDocumentationTasksForProjects(toolkit: Toolkit, jira: JiraApi, projectNumbers: number[], organization: string | null = "shopware") {
+    for (const projectNumber of projectNumbers) {
+        const projectId = await getProjectIdByNumber(toolkit, projectNumber, organization);
+        const correlatedIssues = await correlateIssuesForProject(toolkit, jira, projectId);
+
+        for (const issue of correlatedIssues) {
+            await createDocumentationTask(toolkit, jira, issue);
+        }
     }
-}
-
-export async function correlateAndCreateDocumentationTasks(toolkit: Toolkit, jira: JiraApi, projectId: string) {
-    await createDocumentationTasks(toolkit, jira, await correlateIssuesForProject(toolkit, jira, projectId));
-}
-
-export async function correlateAndCreateDocumentationTasksByProjectNumber(toolkit: Toolkit, jira: JiraApi, projectNumber: number, organization: string | null = null) {
-    await correlateAndCreateDocumentationTasks(toolkit, jira, await getProjectIdByNumber(toolkit, projectNumber, organization));
 }

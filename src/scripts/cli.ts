@@ -7,6 +7,7 @@ import * as glob from "@actions/glob";
 import * as io from "@actions/io";
 import fetch from "node-fetch";
 import JiraApi from "jira-client";
+import {createDocumentationTasksForProjects} from "../index";
 
 const toolkit = {
     github: getOctokit(process.env.GITHUB_TOKEN ?? ""),
@@ -53,8 +54,8 @@ export async function run(method: string, ...args: string[]) {
         case "correlateIssuesForProject":
             result = await automation.correlateIssuesForProject(toolkit, jira, args[0]);
             break;
-        case "correlateAndCreateDocumentationTasks":
-            result = await automation.correlateAndCreateDocumentationTasks(toolkit, jira, args[0]);
+        case "createDocumentationTasksForProjects":
+            result = await createDocumentationTasksForProjects(toolkit, jira, args[0].split(",").map(i => parseInt(i)));
             break;
         default:
             console.warn("Unknown method");

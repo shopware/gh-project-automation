@@ -674,7 +674,7 @@ export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
     }
 }
 
-export async function getProjectIdByNumber(toolkit: Toolkit,  number: number, organization: string | null | undefined) {
+export async function getProjectIdByNumber(toolkit: Toolkit,  number: number, organization: string | null = "shopware") {
     const res = await toolkit.github.graphql<{
         organization: {
             projectV2: {
@@ -690,14 +690,14 @@ export async function getProjectIdByNumber(toolkit: Toolkit,  number: number, or
           }
         }
     `, {
-        organization: organization ?? "shopware",
+        organization: organization,
         number: number
     });
 
     return res.organization.projectV2.id;
 }
 
-export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cursor: string | null, carry: GitHubIssue[] | null): Promise<GitHubIssue[]> {
+export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cursor: string | null = null, carry: GitHubIssue[] | null = null): Promise<GitHubIssue[]> {
     const res = await toolkit.github.graphql<{
         node: {
             items: {
@@ -782,7 +782,7 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cu
 }
 
 export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: string) {
-    const res = await getIssuesByProject(toolkit, projectId, null, null);
+    const res = await getIssuesByProject(toolkit, projectId);
 
     return res.filter((item) => {
         return item.status?.toLowerCase() === "in progress" && item.type?.toLowerCase() === "epic";
@@ -845,11 +845,11 @@ export function hasDocumentationIssueLink(issue: JiraIssue) {
     });
 }
 
-export async function createDocumentationTask(toolkit: Toolkit, jira: JiraApi, issue: CorrelatedIssue) {
+export async function createDocumentationTask(toolkit: Toolkit, jira: JiraApi, issue: CorrelatedIssue, documentationProjectId: number | null = 11806, description: string | null = null) {
     const docTask = await jira.addNewIssue({
         fields: {
             project: {
-                id: 11806, // TODO: Make this configurable
+                id: documentationProjectId
             },
             summary: `${issue.github.title}`,
             description: {
@@ -861,7 +861,7 @@ export async function createDocumentationTask(toolkit: Toolkit, jira: JiraApi, i
                         content: [
                             {
                                 type: "text",
-                                text: `This issue was created automatically.`, // TODO: Make this configurable
+                                text: description ?? `This issue was created automatically.`,
                             },
                             {
                                 type: "text",
@@ -953,6 +953,6 @@ export async function correlateAndCreateDocumentationTasks(toolkit: Toolkit, jir
     await createDocumentationTasks(toolkit, jira, await correlateIssuesForProject(toolkit, jira, projectId));
 }
 
-export async function correlateAndCreateDocumentationTasksByProjectNumber(toolkit: Toolkit, jira: JiraApi, projectNumber: number, organization: string | null | undefined) {
+export async function correlateAndCreateDocumentationTasksByProjectNumber(toolkit: Toolkit, jira: JiraApi, projectNumber: number, organization: string | null = null) {
     await correlateAndCreateDocumentationTasks(toolkit, jira, await getProjectIdByNumber(toolkit, projectNumber, organization));
 }

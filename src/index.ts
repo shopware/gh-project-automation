@@ -36,6 +36,7 @@ type JiraIssue = {
     status?: string
     labels: string[]
     type?: string
+    linkedIssues?: object[]
 }
 
 type CorrelatedIssue = {
@@ -791,26 +792,32 @@ export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: s
 
 export async function correlateGitHubIssueWithJiraEpic(toolkit: Toolkit, jira: JiraApi, issue: GitHubIssue): Promise<CorrelatedIssue | null> {
     const jiraSearchResult = await jira.searchJira(`issuetype = "Epic" AND (summary ~ "${issue.title}" OR comment ~ "${issue.url}")`, {
-        fields: ["summary", "status", "labels"],
+        fields: ["summary", "status", "labels", "issuelinks"],
         maxResults: 1,
     });
 
     if (jiraSearchResult.total < 1) {
         toolkit.core.warning(`No JIRA Epic found for GitHub issue ${issue.title} (${issue.url})`);
+        return null;
+    }
 
+    const jiraIssue = {
+        id: jiraSearchResult.issues[0].id,
+        key: jiraSearchResult.issues[0].key,
+        title: jiraSearchResult.issues[0].fields.summary,
+        status: jiraSearchResult.issues[0].fields.status.name,
+        url: `https://shopware.atlassian.net/browse/${jiraSearchResult.issues[0].key}`,
+        labels: jiraSearchResult.issues[0].fields.labels,
+        linkedIssues: jiraSearchResult.issues[0].fields.issuelinks,
+    }
+
+    if (hasDocumentationIssueLink(jiraIssue)) {
+        toolkit.core.warning(`Found JIRA epic ${jiraIssue.key} but it already has a documentation issue link, skipping...`);
         return null;
     } else {
-        const jiraEpic = jiraSearchResult.issues[0];
         return {
             github: issue,
-            jira: {
-                id: jiraEpic.id,
-                key: jiraEpic.key,
-                title: jiraEpic.fields.summary,
-                status: jiraEpic.fields.status.name,
-                url: `https://shopware.atlassian.net/browse/${jiraEpic.key}`,
-                labels: jiraEpic.fields.labels
-            }
+            jira: jiraIssue
         }
     }
 }
@@ -828,6 +835,14 @@ export async function correlateIssuesForProject(toolkit: Toolkit, jira: JiraApi,
     }
 
     return correlatedIssues;
+}
+
+export function hasDocumentationIssueLink(issue: JiraIssue) {
+    return issue.linkedIssues?.some(link => {
+        return link.type.name === "Relates"
+            && link.outwardIssue.fields.issuetype.name === "Task"
+            && link.outwardIssue.key.startsWith("WM-");
+    });
 }
 
 export async function createDocumentationTask(toolkit: Toolkit, jira: JiraApi, issue: CorrelatedIssue) {
@@ -884,7 +899,3 @@ export async function createDocumentationTasks(toolkit: Toolkit, jira: JiraApi, 
 export async function correlateAndCreateDocumentationTasks(toolkit: Toolkit, jira: JiraApi, projectId: string) {
     await createDocumentationTasks(toolkit, jira, await correlateIssuesForProject(toolkit, jira, projectId));
 }
-
-// IDEA: (GITHUB) Cache all Epics; Add a second workflow that's triggered on issue status changes; invalidate cache when an epic is moved to "In Progress"
-// FIXME: (JIRA) Explore concatenating all GH issues into a large query, using the response afterwards to correlate locally
-// TODO: (JIRA) Filter out ones that already have the custom docs label

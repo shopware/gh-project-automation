@@ -861,10 +861,63 @@ export async function createDocumentationTask(toolkit: Toolkit, jira: JiraApi, i
                         content: [
                             {
                                 type: "text",
-                                text: `Please check the linked epic for more information.`, // TODO: Make this configurable
+                                text: `This issue was created automatically.`, // TODO: Make this configurable
+                            },
+                            {
+                                type: "text",
+                                text: `\n\nPlease refer to the following links and/or related issues for more information:`,
                             },
                         ],
                     },
+                    {
+                        type: "bulletList",
+                        content: [
+                            {
+                                type: "listItem",
+                                content: [
+                                    {
+                                        type: "paragraph",
+                                        content: [
+                                            {
+                                                type: "text",
+                                                text: issue.github.url,
+                                                marks: [
+                                                    {
+                                                        type: "link",
+                                                        attrs: {
+                                                            href: issue.github.url,
+                                                        },
+                                                    },
+                                                ],
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                            {
+                                type: "listItem",
+                                content: [
+                                    {
+                                        type: "paragraph",
+                                        content: [
+                                            {
+                                                type: "text",
+                                                text: issue.jira.key,
+                                                marks: [
+                                                    {
+                                                        type: "link",
+                                                        attrs: {
+                                                            href: "https://shopware.atlassian.net/browse/" + issue.jira.key,
+                                                        },
+                                                    },
+                                                ],
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    }
                 ],
             },
             issuetype: {
@@ -898,4 +951,8 @@ export async function createDocumentationTasks(toolkit: Toolkit, jira: JiraApi, 
 
 export async function correlateAndCreateDocumentationTasks(toolkit: Toolkit, jira: JiraApi, projectId: string) {
     await createDocumentationTasks(toolkit, jira, await correlateIssuesForProject(toolkit, jira, projectId));
+}
+
+export async function correlateAndCreateDocumentationTasksByProjectNumber(toolkit: Toolkit, jira: JiraApi, projectNumber: number, organization: string | null | undefined) {
+    await correlateAndCreateDocumentationTasks(toolkit, jira, await getProjectIdByNumber(toolkit, projectNumber, organization));
 }

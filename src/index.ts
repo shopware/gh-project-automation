@@ -673,50 +673,7 @@ export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
     }
 }
 
-export async function getProjectsByOrg(toolkit: Toolkit, organization: string | null | undefined, count: number | null | undefined) {
-    const res = await toolkit.github.graphql<{
-        organization: {
-            pageInfo: {
-                startCursor: string,
-                endCursor: string,
-                hasPreviousPage: boolean,
-                hasNextPage: boolean
-            }
-            projectsV2: {
-                nodes: [{
-                    number: number,
-                    title: string,
-                    id: string
-                }]
-            }
-        }
-    }>(`
-        query getProjects($organization: String!, $count: Int) {
-          organization(login: $organization) {
-            projectsV2(first: $count) {
-              pageInfo {
-                startCursor
-                endCursor
-                hasPreviousPage
-                hasNextPage
-              }
-              nodes {
-                number
-                title
-                id
-              }
-            }
-          }
-        }
-    `, {
-        organization: organization ?? "shopware",
-        count: count ?? 100
-    });
-
-    return res.organization.projectsV2.nodes;
-}
-
-export async function getProjectIdByNumber(toolkit: Toolkit, organization: string | null | undefined, number: number) {
+export async function getProjectIdByNumber(toolkit: Toolkit,  number: number, organization: string | null | undefined) {
     const res = await toolkit.github.graphql<{
         organization: {
             projectV2: {
@@ -733,22 +690,22 @@ export async function getProjectIdByNumber(toolkit: Toolkit, organization: strin
         }
     `, {
         organization: organization ?? "shopware",
-        number
+        number: number
     });
 
     return res.organization.projectV2.id;
 }
 
-export async function getIssuesByProject(toolkit: Toolkit, projectId: string, count: number | null | undefined): Promise<GitHubIssue[]> {
+export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cursor: string | null, carry: GitHubIssue[] | null): Promise<GitHubIssue[]> {
     const res = await toolkit.github.graphql<{
-        pageInfo: {
-            startCursor: string,
-            endCursor: string,
-            hasPreviousPage: boolean,
-            hasNextPage: boolean
-        },
         node: {
             items: {
+                pageInfo: {
+                    startCursor: string,
+                    endCursor: string,
+                    hasPreviousPage: boolean,
+                    hasNextPage: boolean
+                },
                 nodes: [{
                     fieldValueByName: {
                         name: string
@@ -766,10 +723,10 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, co
             }
         }
     }>(`
-        query getIssuesByProject($projectId: ID!, $count: Int) {
+        query getIssuesByProject($projectId: ID!, $count: Int, $cursor: String) {
             node(id: $projectId) {
                 ... on ProjectV2 {
-                    items(first: $count) {
+                    items(first: $count, after: $cursor) {
                         pageInfo {
                             startCursor
                             endCursor
@@ -800,10 +757,11 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, co
         }
     `, {
         projectId,
-        count: count ?? 100
+        count: 100,
+        cursor: cursor
     });
 
-    return res.node.items.nodes.map((item) => {
+    const issues = res.node.items.nodes.map((item) => {
         return {
             id: item.content.id,
             title: item.content.title,
@@ -814,13 +772,19 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, co
             type: item.content?.issueType?.name
         }
     });
+
+    if (res.node.items.pageInfo.hasNextPage) {
+        return await getIssuesByProject(toolkit, projectId, res.node.items.pageInfo.endCursor, [...issues, ...(carry ?? [])]);
+    } else {
+        return [...issues, ...(carry ?? [])];
+    }
 }
 
-export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: string, count: number | null | undefined) {
-    const res = await getIssuesByProject(toolkit, projectId, count);
+export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: string) {
+    const res = await getIssuesByProject(toolkit, projectId, null, null);
 
     return res.filter((item) => {
-        return item.status === "In Progress" && item.type === "Epic";
+        return item.status?.toLowerCase() === "in progress" && item.type?.toLowerCase() === "epic";
     })
 }
 
@@ -851,8 +815,8 @@ export async function correlateGitHubIssueWithJiraEpic(toolkit: Toolkit, jira: J
     }
 }
 
-export async function correlateIssuesForProject(toolkit: Toolkit, jira: JiraApi, projectId: string, count: number | null | undefined) {
-    const githubEpics = await getEpicsInProgressByProject(toolkit, projectId, count);
+export async function correlateIssuesForProject(toolkit: Toolkit, jira: JiraApi, projectId: string) {
+    const githubEpics = await getEpicsInProgressByProject(toolkit, projectId);
 
     const correlatedIssues: CorrelatedIssue[] = [];
 
@@ -917,12 +881,10 @@ export async function createDocumentationTasks(toolkit: Toolkit, jira: JiraApi, 
     }
 }
 
-export async function correlateAndCreateDocumentationTasks(toolkit: Toolkit, jira: JiraApi, projectId: string, count: number | null | undefined) {
-    const correlatedIssues = await correlateIssuesForProject(toolkit, jira, projectId, count);
-    await createDocumentationTasks(toolkit, jira, correlatedIssues);
+export async function correlateAndCreateDocumentationTasks(toolkit: Toolkit, jira: JiraApi, projectId: string) {
+    await createDocumentationTasks(toolkit, jira, await correlateIssuesForProject(toolkit, jira, projectId));
 }
 
 // IDEA: (GITHUB) Cache all Epics; Add a second workflow that's triggered on issue status changes; invalidate cache when an epic is moved to "In Progress"
-// TODO: (GITHUB) Paginate queries
 // FIXME: (JIRA) Explore concatenating all GH issues into a large query, using the response afterwards to correlate locally
 // TODO: (JIRA) Filter out ones that already have the custom docs label

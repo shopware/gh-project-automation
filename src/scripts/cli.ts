@@ -31,17 +31,14 @@ export async function run(method: string, ...args: string[]) {
     let result;
 
     switch (method) {
-        case "getProjectsByOrg":
-            result = await automation.getProjectsByOrg(toolkit, null, null);
-            break;
         case "getProjectIdByNumber":
-            result = await automation.getProjectIdByNumber(toolkit, null, parseInt(args[0]));
+            result = await automation.getProjectIdByNumber(toolkit, parseInt(args[0]), "shopware");
             break;
         case "getIssuesByProject":
-            result = await automation.getIssuesByProject(toolkit, args[0], parseInt(args[1]));
+            result = await automation.getIssuesByProject(toolkit, args[0], null, null);
             break;
         case "getEpicsInProgressByProject":
-            result = await automation.getEpicsInProgressByProject(toolkit, args[0], null);
+            result = await automation.getEpicsInProgressByProject(toolkit, args[0]);
             break;
         case "correlateGitHubIssueWithJiraEpic":
             result = await automation.correlateGitHubIssueWithJiraEpic(toolkit, jira, {
@@ -54,10 +51,10 @@ export async function run(method: string, ...args: string[]) {
             });
             break;
         case "correlateIssuesForProject":
-            result = await automation.correlateIssuesForProject(toolkit, jira, args[0], null);
+            result = await automation.correlateIssuesForProject(toolkit, jira, args[0]);
             break;
         case "correlateAndCreateDocumentationTasks":
-            result = await automation.correlateAndCreateDocumentationTasks(toolkit, jira, args[0], null);
+            result = await automation.correlateAndCreateDocumentationTasks(toolkit, jira, args[0]);
             break;
         default:
             console.warn("Unknown method");

@@ -866,8 +866,63 @@ export async function correlateIssuesForProject(toolkit: Toolkit, jira: JiraApi,
     return correlatedIssues;
 }
 
+export async function createDocumentationTask(toolkit: Toolkit, jira: JiraApi, issue: CorrelatedIssue) {
+    const docTask = await jira.addNewIssue({
+        fields: {
+            project: {
+                id: 11806, // TODO: Make this configurable
+            },
+            summary: `${issue.github.title}`,
+            description: {
+                version: 1,
+                type: "doc",
+                content: [
+                    {
+                        type: "paragraph",
+                        content: [
+                            {
+                                type: "text",
+                                text: `Please check the linked epic for more information.`, // TODO: Make this configurable
+                            },
+                        ],
+                    },
+                ],
+            },
+            issuetype: {
+                name: "Task",
+            },
+        },
+        update: {
+            issuelinks: [
+                {
+                    add: {
+                        type: {
+                            name: "Relates",
+                        },
+                        inwardIssue: {
+                            key: issue.jira.key
+                        }
+                    }
+                }
+            ],
+        }
+    });
+
+    toolkit.core.info(`Created documentation task in JIRA: https://shopware.atlassian.net/browse/${docTask.key}`);
+}
+
+export async function createDocumentationTasks(toolkit: Toolkit, jira: JiraApi, issues: CorrelatedIssue[]) {
+    for (const issue of issues) {
+        await createDocumentationTask(toolkit, jira, issue);
+    }
+}
+
+export async function correlateAndCreateDocumentationTasks(toolkit: Toolkit, jira: JiraApi, projectId: string, count: number | null | undefined) {
+    const correlatedIssues = await correlateIssuesForProject(toolkit, jira, projectId, count);
+    await createDocumentationTasks(toolkit, jira, correlatedIssues);
+}
+
 // IDEA: (GITHUB) Cache all Epics; Add a second workflow that's triggered on issue status changes; invalidate cache when an epic is moved to "In Progress"
 // TODO: (GITHUB) Paginate queries
 // FIXME: (JIRA) Explore concatenating all GH issues into a large query, using the response afterwards to correlate locally
 // TODO: (JIRA) Filter out ones that already have the custom docs label
-// TODO: Iterate over all correlated epics and create a docs ticket for each of them

@@ -54,7 +54,10 @@ export async function run(method: string, ...args: string[]) {
             });
             break;
         case "correlateIssuesForProject":
-            result = await automation.correlateIssuesForProject(toolkit, jira, args[0], parseInt(args[1]));
+            result = await automation.correlateIssuesForProject(toolkit, jira, args[0], null);
+            break;
+        case "correlateAndCreateDocumentationTasks":
+            result = await automation.correlateAndCreateDocumentationTasks(toolkit, jira, args[0], null);
             break;
         default:
             console.warn("Unknown method");

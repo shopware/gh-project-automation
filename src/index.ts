@@ -691,6 +691,13 @@ export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
     }
 }
 
+/**
+ * getProjectIdByNumber fetches the project ID for a given project number.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param number - The project number to get the ID for.
+ * @param organization - The organization name whose projects to consider.
+ */
 export async function getProjectIdByNumber(toolkit: Toolkit,  number: number, organization: string | null = "shopware") {
     const res = await toolkit.github.graphql<{
         organization: {
@@ -714,6 +721,18 @@ export async function getProjectIdByNumber(toolkit: Toolkit,  number: number, or
     return res.organization.projectV2.id;
 }
 
+/**
+ * getIssuesByProject fetches all issues from a project.
+ *
+ * @remarks
+ * This function uses pagination to fetch all issues from a project.
+ * It will keep fetching until all issues are retrieved.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param projectId - The ID of the project to fetch issues from.
+ * @param cursor - The cursor for pagination.
+ * @param carry - The issues already fetched.
+ */
 export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cursor: string | null = null, carry: GitHubIssue[] | null = null): Promise<GitHubIssue[]> {
     const res = await toolkit.github.graphql<{
         node: {
@@ -798,6 +817,12 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cu
     }
 }
 
+/**
+ * getEpicsInProgressByProject fetches all epics in progress from a project.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param projectId - The ID of the project to fetch issues from.
+ */
 export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: string) {
     const res = await getIssuesByProject(toolkit, projectId);
 
@@ -806,6 +831,12 @@ export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: s
     })
 }
 
+/**
+ * correlateGitHubIssueWithJiraEpic fetches the JIRA epic for a given GitHub issue.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param issue - The GitHub issue to correlate with a JIRA epic.
+ */
 export async function correlateGitHubIssueWithJiraEpic(toolkit: Toolkit, issue: GitHubIssue): Promise<CorrelatedIssue | null> {
     const jiraSearchResult = await toolkit.fetch(`${jiraBaseUrl}/search/jql`, {
         method: 'POST',
@@ -849,6 +880,12 @@ export async function correlateGitHubIssueWithJiraEpic(toolkit: Toolkit, issue: 
     }
 }
 
+/**
+ * correlateIssuesForProject fetches all issues from a project and correlates them with JIRA epics.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param projectId - The ID of the project to fetch issues from.
+ */
 export async function correlateIssuesForProject(toolkit: Toolkit, projectId: string) {
     const githubEpics = await getEpicsInProgressByProject(toolkit, projectId);
 
@@ -864,6 +901,11 @@ export async function correlateIssuesForProject(toolkit: Toolkit, projectId: str
     return correlatedIssues;
 }
 
+/**
+ * hasDocumentationIssueLink checks if a JIRA issue is linked to a documentation issue.
+ *
+ * @param issue - The JIRA issue to check.
+ */
 export function hasDocumentationIssueLink(issue: JiraIssue) {
     return issue.linkedIssues?.some(link => {
         return link.type.name === "Relates"
@@ -872,6 +914,14 @@ export function hasDocumentationIssueLink(issue: JiraIssue) {
     });
 }
 
+/**
+ * createDocumentationTask creates a documentation task in JIRA for a given correlated issue.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param issue - The issue to create a documentation task for.
+ * @param documentationProjectId - The ID of the documentation project.
+ * @param description - The description of the documentation task.
+ */
 export async function createDocumentationTask(toolkit: Toolkit, issue: CorrelatedIssue, documentationProjectId: number | null = 11806, description: string | null = null) {
     const docTask = await toolkit.fetch(`${jiraBaseUrl}/issue`, {
         method: 'POST',
@@ -980,6 +1030,13 @@ export async function createDocumentationTask(toolkit: Toolkit, issue: Correlate
     toolkit.core.info(`Created documentation task in JIRA: https://shopware.atlassian.net/browse/${docTask.key}`);
 }
 
+/**
+ * createDocumentationTasksForProjects creates documentation tasks for all projects with the given project numbers.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param projectNumbers - The project numbers to create documentation tasks for.
+ * @param organization - The organization name whose projects to consider.
+ */
 export async function createDocumentationTasksForProjects(toolkit: Toolkit, projectNumbers: number[], organization: string | null = "shopware") {
     for (const projectNumber of projectNumbers) {
         const projectId = await getProjectIdByNumber(toolkit, projectNumber, organization);

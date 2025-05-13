@@ -18,6 +18,16 @@ const toolkit = {
     fetch: fetch,
 }
 
+/**
+ * Run the automation functions from the command line.
+ * This is just a convenience for testing and debugging.
+ *
+ * @param method The method to run
+ * @param args The arguments to pass to the method
+ *
+ * @example
+ * npm run cli -- getProjectIdByNumber 22
+ */
 export async function run(method: string, ...args: string[]) {
     let result;
 

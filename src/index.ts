@@ -1036,14 +1036,16 @@ export async function createDocumentationTask(toolkit: Toolkit, issue: Correlate
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  * @param projectNumbers - The project numbers to create documentation tasks for.
  * @param organization - The organization name whose projects to consider.
+ * @param documentationProjectId - The ID of the documentation project.
+ * @param description - The description of the documentation task.
  */
-export async function createDocumentationTasksForProjects(toolkit: Toolkit, projectNumbers: number[], organization: string | null = "shopware") {
+export async function createDocumentationTasksForProjects(toolkit: Toolkit, projectNumbers: number[], organization: string | null = "shopware", documentationProjectId: number | null = 11806, description: string | null = null) {
     for (const projectNumber of projectNumbers) {
         const projectId = await getProjectIdByNumber(toolkit, projectNumber, organization);
         const correlatedIssues = await correlateIssuesForProject(toolkit, projectId);
 
         for (const issue of correlatedIssues) {
-            await createDocumentationTask(toolkit, issue);
+            await createDocumentationTask(toolkit, issue, documentationProjectId, description);
         }
     }
 }

@@ -16,6 +16,51 @@ type Label = {
     color: string
 };
 
+type GitHubIssue = {
+    id: string
+    title: string
+    number?: number
+    url?: string
+    status?: string
+    labels: Label[]
+    type?: string
+}
+
+type JiraIssueLink = {
+    id: string
+    type: {
+        name: string
+    }
+    outwardIssue: {
+        key: string
+        fields: {
+            issuetype: {
+                name: string
+            }
+            key: string
+        }
+    }
+}
+
+type JiraIssue = {
+    id: string
+    title: string
+    key: string
+    url?: string
+    status?: string
+    labels: string[]
+    type?: string
+    linkedIssues?: JiraIssueLink[]
+}
+
+type CorrelatedIssue = {
+    github: GitHubIssue,
+    jira: JiraIssue
+}
+
+const jiraHost = "shopware.atlassian.net";
+const jiraBaseUrl = `https://${jiraHost}/rest/api/3`;
+
 async function closeIssue(toolkit: Toolkit, issueId: string) {
     const res = await toolkit.github.graphql(
         `mutation closeIssue($issueId: ID!) {
@@ -643,5 +688,362 @@ export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
         }
 
         await closeIssue(toolkit, issue.id);
+    }
+}
+
+/**
+ * getProjectIdByNumber fetches the project ID for a given project number.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param number - The project number to get the ID for.
+ * @param organization - The organization name whose projects to consider.
+ */
+export async function getProjectIdByNumber(toolkit: Toolkit,  number: number, organization: string | null = "shopware") {
+    const res = await toolkit.github.graphql<{
+        organization: {
+            projectV2: {
+                id: string
+            }
+        }
+    }>(`
+        query getProjectIdByNumber($organization: String!, $number: Int!) {
+          organization(login: $organization) {
+            projectV2(number: $number) {
+              id
+            }
+          }
+        }
+    `, {
+        organization: organization,
+        number: number
+    });
+
+    return res.organization.projectV2.id;
+}
+
+/**
+ * getIssuesByProject fetches all issues from a project.
+ *
+ * @remarks
+ * This function uses pagination to fetch all issues from a project.
+ * It will keep fetching until all issues are retrieved.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param projectId - The ID of the project to fetch issues from.
+ * @param cursor - The cursor for pagination.
+ * @param carry - The issues already fetched.
+ */
+export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cursor: string | null = null, carry: GitHubIssue[] | null = null): Promise<GitHubIssue[]> {
+    const res = await toolkit.github.graphql<{
+        node: {
+            items: {
+                pageInfo: {
+                    startCursor: string,
+                    endCursor: string,
+                    hasPreviousPage: boolean,
+                    hasNextPage: boolean
+                },
+                nodes: [{
+                    fieldValueByName: {
+                        name: string
+                    },
+                    content: {
+                        id: string,
+                        title: string,
+                        number: number,
+                        url: string,
+                        issueType?: {
+                            name: string
+                        }
+                    }
+                }]
+            }
+        }
+    }>(`
+        query getIssuesByProject($projectId: ID!, $count: Int, $cursor: String) {
+            node(id: $projectId) {
+                ... on ProjectV2 {
+                    items(first: $count, after: $cursor) {
+                        pageInfo {
+                            startCursor
+                            endCursor
+                            hasPreviousPage
+                            hasNextPage
+                        }
+                        nodes {
+                            fieldValueByName(name: "Status") {
+                                ... on ProjectV2ItemFieldSingleSelectValue {
+                                    name
+                                }
+                            }
+                            content {
+                                ... on Issue {
+                                    id
+                                    title
+                                    number
+                                    url
+                                    issueType {
+                                        name
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    `, {
+        projectId,
+        count: 100,
+        cursor: cursor
+    });
+
+    const issues = res.node.items.nodes.map((item) => {
+        return {
+            id: item.content.id,
+            title: item.content.title,
+            number: item.content.number,
+            url: item.content.url,
+            status: item.fieldValueByName?.name,
+            labels: [],
+            type: item.content?.issueType?.name
+        }
+    });
+
+    if (res.node.items.pageInfo.hasNextPage) {
+        return await getIssuesByProject(toolkit, projectId, res.node.items.pageInfo.endCursor, [...issues, ...(carry ?? [])]);
+    } else {
+        return [...issues, ...(carry ?? [])];
+    }
+}
+
+/**
+ * getEpicsInProgressByProject fetches all epics in progress from a project.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param projectId - The ID of the project to fetch issues from.
+ */
+export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: string) {
+    const res = await getIssuesByProject(toolkit, projectId);
+
+    return res.filter((item) => {
+        return item.status?.toLowerCase() === "in progress" && item.type?.toLowerCase() === "epic";
+    })
+}
+
+/**
+ * correlateGitHubIssueWithJiraEpic fetches the JIRA epic for a given GitHub issue.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param issue - The GitHub issue to correlate with a JIRA epic.
+ */
+export async function correlateGitHubIssueWithJiraEpic(toolkit: Toolkit, issue: GitHubIssue): Promise<CorrelatedIssue | null> {
+    const jiraSearchResult = await toolkit.fetch(`${jiraBaseUrl}/search/jql`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Basic ${Buffer.from(
+                `${process.env.JIRA_USERNAME}:${process.env.JIRA_API_TOKEN}`,
+            ).toString('base64')}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            jql: `issuetype = "Epic" AND (summary ~ "${issue.title}" OR comment ~ "${issue.url}")`,
+            fields: ["summary", "status", "labels", "issuelinks"],
+            maxResults: 1,
+        })
+    }).then(res => res.json());
+
+    if (!jiraSearchResult.issues || jiraSearchResult.issues.length < 1) {
+        toolkit.core.warning(`No JIRA Epic found for GitHub issue ${issue.title} (${issue.url})`);
+        return null;
+    }
+
+    const jiraIssue = {
+        id: jiraSearchResult.issues[0].id,
+        key: jiraSearchResult.issues[0].key,
+        title: jiraSearchResult.issues[0].fields.summary,
+        status: jiraSearchResult.issues[0].fields.status.name,
+        url: `https://shopware.atlassian.net/browse/${jiraSearchResult.issues[0].key}`,
+        labels: jiraSearchResult.issues[0].fields.labels,
+        linkedIssues: jiraSearchResult.issues[0].fields.issuelinks,
+    }
+
+    if (hasDocumentationIssueLink(jiraIssue)) {
+        toolkit.core.warning(`Found JIRA epic ${jiraIssue.key} but it already has a documentation issue link, skipping...`);
+        return null;
+    } else {
+        return {
+            github: issue,
+            jira: jiraIssue
+        }
+    }
+}
+
+/**
+ * correlateIssuesForProject fetches all issues from a project and correlates them with JIRA epics.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param projectId - The ID of the project to fetch issues from.
+ */
+export async function correlateIssuesForProject(toolkit: Toolkit, projectId: string) {
+    const githubEpics = await getEpicsInProgressByProject(toolkit, projectId);
+
+    const correlatedIssues: CorrelatedIssue[] = [];
+
+    for (const githubEpic of githubEpics) {
+        const correlatedIssue = await correlateGitHubIssueWithJiraEpic(toolkit, githubEpic);
+        if (correlatedIssue) {
+            correlatedIssues.push(correlatedIssue);
+        }
+    }
+
+    return correlatedIssues;
+}
+
+/**
+ * hasDocumentationIssueLink checks if a JIRA issue is linked to a documentation issue.
+ *
+ * @param issue - The JIRA issue to check.
+ */
+export function hasDocumentationIssueLink(issue: JiraIssue) {
+    return issue.linkedIssues?.some(link => {
+        return link.type.name === "Relates"
+            && link.outwardIssue.fields.issuetype.name === "Task"
+            && link.outwardIssue.key.startsWith("WM-");
+    });
+}
+
+/**
+ * createDocumentationTask creates a documentation task in JIRA for a given correlated issue.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param issue - The issue to create a documentation task for.
+ * @param documentationProjectId - The ID of the documentation project.
+ * @param description - The description of the documentation task.
+ */
+export async function createDocumentationTask(toolkit: Toolkit, issue: CorrelatedIssue, documentationProjectId: number | null = 11806, description: string | null = null) {
+    const docTask = await toolkit.fetch(`${jiraBaseUrl}/issue`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Basic ${Buffer.from(
+                `${process.env.JIRA_USERNAME}:${process.env.JIRA_API_TOKEN}`,
+            ).toString('base64')}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            fields: {
+                project: {
+                    id: documentationProjectId
+                },
+                summary: `${issue.github.title}`,
+                description: {
+                    version: 1,
+                    type: "doc",
+                    content: [
+                        {
+                            type: "paragraph",
+                            content: [
+                                {
+                                    type: "text",
+                                    text: description ?? `This issue was created automatically.`,
+                                },
+                                {
+                                    type: "text",
+                                    text: `\n\nPlease refer to the following links and/or related issues for more information:`,
+                                },
+                            ],
+                        },
+                        {
+                            type: "bulletList",
+                            content: [
+                                {
+                                    type: "listItem",
+                                    content: [
+                                        {
+                                            type: "paragraph",
+                                            content: [
+                                                {
+                                                    type: "text",
+                                                    text: issue.github.url,
+                                                    marks: [
+                                                        {
+                                                            type: "link",
+                                                            attrs: {
+                                                                href: issue.github.url,
+                                                            },
+                                                        },
+                                                    ],
+                                                },
+                                            ],
+                                        },
+                                    ],
+                                },
+                                {
+                                    type: "listItem",
+                                    content: [
+                                        {
+                                            type: "paragraph",
+                                            content: [
+                                                {
+                                                    type: "text",
+                                                    text: issue.jira.key,
+                                                    marks: [
+                                                        {
+                                                            type: "link",
+                                                            attrs: {
+                                                                href: "https://shopware.atlassian.net/browse/" + issue.jira.key,
+                                                            },
+                                                        },
+                                                    ],
+                                                },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            ],
+                        }
+                    ],
+                },
+                issuetype: {
+                    name: "Task",
+                },
+            },
+            update: {
+                issuelinks: [
+                    {
+                        add: {
+                            type: {
+                                name: "Relates",
+                            },
+                            inwardIssue: {
+                                key: issue.jira.key
+                            }
+                        }
+                    }
+                ],
+            }
+        })
+    }).then(res => res.json());
+
+    toolkit.core.info(`Created documentation task in JIRA: https://shopware.atlassian.net/browse/${docTask.key}`);
+}
+
+/**
+ * createDocumentationTasksForProjects creates documentation tasks for all projects with the given project numbers.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param projectNumbers - The project numbers to create documentation tasks for.
+ * @param organization - The organization name whose projects to consider.
+ */
+export async function createDocumentationTasksForProjects(toolkit: Toolkit, projectNumbers: number[], organization: string | null = "shopware") {
+    for (const projectNumber of projectNumbers) {
+        const projectId = await getProjectIdByNumber(toolkit, projectNumber, organization);
+        const correlatedIssues = await correlateIssuesForProject(toolkit, projectId);
+
+        for (const issue of correlatedIssues) {
+            await createDocumentationTask(toolkit, issue);
+        }
     }
 }

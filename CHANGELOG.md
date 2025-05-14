@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/shopware/gh-project-automation/compare/v1.3.0...v1.3.1) (2025-05-14)
+
+
+### Bug Fixes
+
+* allow documentation project ID to be passed in ([#13](https://github.com/shopware/gh-project-automation/issues/13)) ([086a6f6](https://github.com/shopware/gh-project-automation/commit/086a6f6a80a7b2566fad4e281157a727ce239479))
+
 ## [1.3.0](https://github.com/shopware/gh-project-automation/compare/v1.2.0...v1.3.0) (2025-05-14)
 
 

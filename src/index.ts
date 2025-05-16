@@ -1049,3 +1049,196 @@ export async function createDocumentationTasksForProjects(toolkit: Toolkit, proj
         }
     }
 }
+
+type QueryResponse = {
+    repository: {
+        issues?: {
+            pageInfo: {
+                hasNextPage: boolean,
+                endCursor: string
+            },
+            nodes: [{
+                id: string,
+                number: number,
+                title: string,
+                labels: {
+                    nodes: [{
+                        name: string
+                    }]
+                }
+            }]
+        },
+        pullRequests?: {
+            pageInfo: {
+                hasNextPage: boolean,
+                endCursor: string
+            },
+            nodes: [{
+                id: string,
+                number: number,
+                title: string,
+                labels: {
+                    nodes: [{
+                        name: string
+                    }]
+                }
+            }]
+        }
+    }
+};
+
+type Labelable = {
+    id: string,
+    number: number,
+    title: string,
+    labels: {
+        nodes: [{
+            name: string
+        }]
+    }
+};
+
+async function manageNeedsTriageLabel(toolkit: Toolkit, labelable: Labelable, needsTriageLabel: Label, dryRun: boolean) {
+    const labels = labelable.labels.nodes.map((label: { name: string }) => label.name);
+    const hasNeedsTriage = labels.includes("needs-triage");
+    const hasDomainOrServiceLabel = labels.some((label: string) => 
+        label.startsWith("domain/") || label.startsWith("service/")
+    );
+
+    if (hasDomainOrServiceLabel && hasNeedsTriage) {
+        if (dryRun) {
+            toolkit.core.info(`Would remove needs-triage label from #${labelable.number}: ${labelable.title} (has domain/service label)`);
+        } else {
+            await toolkit.github.graphql(`
+                mutation removeLabel($labelableId: ID!, $labelIds: [ID!]!) {
+                    removeLabelsFromLabelable(input: {
+                        labelableId: $labelableId,
+                        labelIds: $labelIds
+                    }) {
+                        clientMutationId
+                    }
+                }
+            `, {
+                labelableId: labelable.id,
+                labelIds: [needsTriageLabel.id]
+            });
+            toolkit.core.info(`Removed needs-triage label from #${labelable.number}: ${labelable.title} (has domain/service label)`);
+        }
+    } else if (!hasNeedsTriage && !hasDomainOrServiceLabel) {
+        if (dryRun) {
+            toolkit.core.info(`Would add needs-triage label to #${labelable.number}: ${labelable.title}`);
+        } else {
+            await addLabelToLabelable(toolkit, needsTriageLabel.id, labelable.id);
+            toolkit.core.info(`Added needs-triage label to #${labelable.number}: ${labelable.title}`);
+        }
+    }
+}
+
+/**
+ * Cleans up needs-triage in issues and pull requests
+ * 
+ * @param toolkit - The toolkit instance to interact with the project management system.
+ * @param dryRun - If true, only log what would be done without making changes.
+ * 
+ * @remarks
+ * This function finds all open issues and pull requests and ensures they have either:
+ * - The needs-triage label, or
+ * - A label starting with 'domain/' or 'service/'
+ * - If an item has a `domain/` or `service/` label, remove the `needs-triage` label
+ * 
+ * Closed items are ignored. The function handles pagination to process all items.
+ */
+export async function cleanupNeedsTriage(toolkit: Toolkit, dryRun: boolean = false) {
+    const needsTriageLabel = await getLabelByName(toolkit, "shopware", "needs-triage");
+    if (!needsTriageLabel) {
+        throw new Error("Couldn't find the needs-triage label");
+    }
+
+    let processedItems = 0;
+
+    // Process issues
+    let hasNextPageIssues = true;
+    let cursorIssues: string | null = null;
+
+    while (hasNextPageIssues) {
+        const res: QueryResponse = await toolkit.github.graphql<QueryResponse>(`
+            query getOpenIssues($cursor: String) {
+                repository(owner: "shopware", name: "shopware") {
+                    issues(first: 100, after: $cursor, states: OPEN) {
+                        pageInfo {
+                            hasNextPage
+                            endCursor
+                        }
+                        nodes {
+                            id
+                            number
+                            title
+                            labels(first: 20) {
+                                nodes {
+                                    name
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        `, {
+            cursor: cursorIssues
+        });
+
+        const issues = res.repository.issues?.nodes ?? [];
+        hasNextPageIssues = res.repository.issues?.pageInfo.hasNextPage ?? false;
+        cursorIssues = res.repository.issues?.pageInfo.endCursor ?? null;
+
+        for (const item of issues) {
+            await manageNeedsTriageLabel(toolkit, item, needsTriageLabel, dryRun);
+        }
+
+        processedItems += issues.length;
+        toolkit.core.info(`Processed ${processedItems} items so far...`);
+    }
+
+    // Process pull requests
+    let hasNextPagePRs = true;
+    let cursorPRs: string | null = null;
+
+    while (hasNextPagePRs) {
+        const res: QueryResponse = await toolkit.github.graphql<QueryResponse>(`
+            query getOpenPRs($cursor: String) {
+                repository(owner: "shopware", name: "shopware") {
+                    pullRequests(first: 100, after: $cursor, states: OPEN) {
+                        pageInfo {
+                            hasNextPage
+                            endCursor
+                        }
+                        nodes {
+                            id
+                            number
+                            title
+                            labels(first: 20) {
+                                nodes {
+                                    name
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        `, {
+            cursor: cursorPRs
+        });
+
+        const pullRequests = res.repository.pullRequests?.nodes ?? [];
+        hasNextPagePRs = res.repository.pullRequests?.pageInfo.hasNextPage ?? false;
+        cursorPRs = res.repository.pullRequests?.pageInfo.endCursor ?? null;
+
+        for (const item of pullRequests) {
+            await manageNeedsTriageLabel(toolkit, item, needsTriageLabel, dryRun);
+        }
+
+        processedItems += pullRequests.length;
+        toolkit.core.info(`Processed ${processedItems} items so far...`);
+    }
+
+    toolkit.core.info(`Finished processing ${processedItems} items`);
+}

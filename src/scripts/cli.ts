@@ -57,6 +57,9 @@ export async function run(method: string, ...args: string[]) {
         case "createDocumentationTasksForProjects":
             result = await createDocumentationTasksForProjects(toolkit, args[0].split(",").map(i => parseInt(i)));
             break;
+        case "cleanupNeedsTriage":
+            result = await automation.cleanupNeedsTriage(toolkit, true);
+            break;
         default:
             console.warn("Unknown method");
             break;

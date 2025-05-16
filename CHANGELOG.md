@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/shopware/gh-project-automation/compare/v1.4.0...v1.4.1) (2025-05-16)
+
+
+### Bug Fixes
+
+* add missing $ to labelableId ([#17](https://github.com/shopware/gh-project-automation/issues/17)) ([05bd8ec](https://github.com/shopware/gh-project-automation/commit/05bd8ecb6a2015b92f70e6e019c91dd9b3d0fe31))
+
 ## [1.4.0](https://github.com/shopware/gh-project-automation/compare/v1.3.1...v1.4.0) (2025-05-16)
 
 

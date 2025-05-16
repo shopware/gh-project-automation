@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/shopware/gh-project-automation/compare/v1.3.1...v1.4.0) (2025-05-16)
+
+
+### Features
+
+* add cleanupNeedsTriage ([#15](https://github.com/shopware/gh-project-automation/issues/15)) ([c8d0f96](https://github.com/shopware/gh-project-automation/commit/c8d0f963e8f50144046983a1db334992d90b027b))
+
+
+### Bug Fixes
+
+* markStaleIssues logic ([#11](https://github.com/shopware/gh-project-automation/issues/11)) ([77d2eeb](https://github.com/shopware/gh-project-automation/commit/77d2eeb39f1027422acb871a8a09a312c12b98e6))
+
 ## [1.3.1](https://github.com/shopware/gh-project-automation/compare/v1.3.0...v1.3.1) (2025-05-14)
 
 

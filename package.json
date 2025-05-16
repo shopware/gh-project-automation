@@ -1,6 +1,6 @@
 {
   "name": "@shopware-ag/gh-project-automation",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Project automation for shopware",
   "type": "module",
   "scripts": {

@@ -855,7 +855,7 @@ export async function correlateGitHubIssueWithJiraEpic(toolkit: Toolkit, issue: 
     }).then(res => res.json());
 
     if (!jiraSearchResult.issues || jiraSearchResult.issues.length < 1) {
-        toolkit.core.warning(`No JIRA Epic found for GitHub issue ${issue.title} (${issue.url})`);
+        toolkit.core.warning(`No JIRA Epic found for GitHub issue ${issue.url}`);
         return null;
     }
 

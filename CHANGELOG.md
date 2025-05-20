@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.2](https://github.com/shopware/gh-project-automation/compare/v1.4.1...v1.4.2) (2025-05-20)
+
+
+### Bug Fixes
+
+* remove issue title from logs ([#19](https://github.com/shopware/gh-project-automation/issues/19)) ([8793bcf](https://github.com/shopware/gh-project-automation/commit/8793bcfd76f5733e9b50ca8c49774aa2c876a9ce))
+
 ## [1.4.1](https://github.com/shopware/gh-project-automation/compare/v1.4.0...v1.4.1) (2025-05-16)
 
 

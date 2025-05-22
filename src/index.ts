@@ -26,6 +26,15 @@ type GitHubIssue = {
     type?: string
 }
 
+type GitHubComment = {
+    id: string
+    author: {
+        login: string
+    }
+    body: string
+    url?: string
+}
+
 type JiraIssueLink = {
     id: string
     type: {
@@ -53,13 +62,9 @@ type JiraIssue = {
     linkedIssues?: JiraIssueLink[]
 }
 
-type CorrelatedIssue = {
-    github: GitHubIssue,
-    jira: JiraIssue
-}
-
 const jiraHost = "shopware.atlassian.net";
 const jiraBaseUrl = `https://${jiraHost}/rest/api/3`;
+const docIssueReference = Buffer.from("doc-issue-created").toString("base64");
 
 async function closeIssue(toolkit: Toolkit, issueId: string) {
     const res = await toolkit.github.graphql(
@@ -823,7 +828,7 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cu
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  * @param projectId - The ID of the project to fetch issues from.
  */
-export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: string) {
+export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: string): Promise<GitHubIssue[]> {
     const res = await getIssuesByProject(toolkit, projectId);
 
     return res.filter((item) => {
@@ -832,97 +837,152 @@ export async function getEpicsInProgressByProject(toolkit: Toolkit, projectId: s
 }
 
 /**
- * correlateGitHubIssueWithJiraEpic fetches the JIRA epic for a given GitHub issue.
+ * getCommentsForIssue fetches all comments for a given issue.
+ *
+ * @remarks
+ * This function uses pagination to fetch all comments for an issue.
+ * It will keep fetching until all comments are retrieved.
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
- * @param issue - The GitHub issue to correlate with a JIRA epic.
+ * @param issueId - The ID of the issue to fetch comments for.
+ * @param cursor - The cursor for pagination.
+ * @param carry - The comments already fetched.
  */
-export async function correlateGitHubIssueWithJiraEpic(toolkit: Toolkit, issue: GitHubIssue): Promise<CorrelatedIssue | null> {
-    const jiraSearchResult = await toolkit.fetch(`${jiraBaseUrl}/search/jql`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Basic ${Buffer.from(
-                `${process.env.JIRA_USERNAME}:${process.env.JIRA_API_TOKEN}`,
-            ).toString('base64')}`,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            jql: `issuetype = "Epic" AND (summary ~ "${issue.title}" OR comment ~ "${issue.url}")`,
-            fields: ["summary", "status", "labels", "issuelinks"],
-            maxResults: 1,
-        })
-    }).then(res => res.json());
+export async function getCommentsForIssue(toolkit: Toolkit, issueId: string,  cursor: string | null = null, carry: GitHubComment[] | null = null) {
+    const res = await toolkit.github.graphql<{
+        node: {
+            comments: {
+                pageInfo: {
+                    startCursor: string,
+                    endCursor: string,
+                    hasPreviousPage: boolean,
+                    hasNextPage: boolean
+                },
+                nodes: GitHubComment[]
+            }
+        }
+    }>(`
+        query getCommentsForIssue($issueId: ID!, $count: Int, $cursor: String) {
+            node(id: $issueId) {
+                ... on Issue {
+                    comments(first: $count, after: $cursor) {
+                        pageInfo {
+                            startCursor
+                            endCursor
+                            hasPreviousPage
+                            hasNextPage
+                        }
+                        nodes {
+                            id
+                            author {
+                                login
+                            }
+                            body
+                        }
+                    }
+                }
+            }
+        }
+    `, {
+        issueId,
+        count: 100,
+        cursor: cursor
+    })
 
-    if (!jiraSearchResult.issues || jiraSearchResult.issues.length < 1) {
-        toolkit.core.warning(`No JIRA Epic found for GitHub issue ${issue.url}`);
-        return null;
-    }
+    const comments = res.node.comments.nodes;
 
-    const jiraIssue = {
-        id: jiraSearchResult.issues[0].id,
-        key: jiraSearchResult.issues[0].key,
-        title: jiraSearchResult.issues[0].fields.summary,
-        status: jiraSearchResult.issues[0].fields.status.name,
-        url: `https://shopware.atlassian.net/browse/${jiraSearchResult.issues[0].key}`,
-        labels: jiraSearchResult.issues[0].fields.labels,
-        linkedIssues: jiraSearchResult.issues[0].fields.issuelinks,
-    }
-
-    if (hasDocumentationIssueLink(jiraIssue)) {
-        toolkit.core.warning(`Found JIRA epic ${jiraIssue.key} but it already has a documentation issue link, skipping...`);
-        return null;
+    if (res.node.comments.pageInfo.hasNextPage) {
+        return await getCommentsForIssue(toolkit, issueId, res.node.comments.pageInfo.endCursor, [...comments, ...(carry ?? [])]);
     } else {
-        return {
-            github: issue,
-            jira: jiraIssue
-        }
+        return [...comments, ...(carry ?? [])];
     }
 }
 
 /**
- * correlateIssuesForProject fetches all issues from a project and correlates them with JIRA epics.
+ * hasDocIssueComment checks if a GitHub issue has a comment that references a documentation issue.
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
- * @param projectId - The ID of the project to fetch issues from.
+ * @param issueId - The ID of the issue to check.
  */
-export async function correlateIssuesForProject(toolkit: Toolkit, projectId: string) {
-    const githubEpics = await getEpicsInProgressByProject(toolkit, projectId);
+export async function hasDocIssueComment(toolkit: Toolkit, issueId: string) {
+    const comments = await getCommentsForIssue(toolkit, issueId);
 
-    const correlatedIssues: CorrelatedIssue[] = [];
-
-    for (const githubEpic of githubEpics) {
-        const correlatedIssue = await correlateGitHubIssueWithJiraEpic(toolkit, githubEpic);
-        if (correlatedIssue) {
-            correlatedIssues.push(correlatedIssue);
+    for (const comment of comments) {
+        if (referencesDocIssue(comment)) {
+            return true;
         }
     }
 
-    return correlatedIssues;
+    return false;
 }
 
 /**
- * hasDocumentationIssueLink checks if a JIRA issue is linked to a documentation issue.
+ * referencesDocIssue checks if a comment contains a link to a documentation issue.
  *
- * @param issue - The JIRA issue to check.
+ * @param comment - The comment to check.
  */
-export function hasDocumentationIssueLink(issue: JiraIssue) {
-    return issue.linkedIssues?.some(link => {
-        return link.type.name === "Relates"
-            && link.outwardIssue.fields.issuetype.name === "Task"
-            && link.outwardIssue.key.startsWith("WM-");
-    });
+export function referencesDocIssue(comment: GitHubComment) {
+    return comment.body.includes(docIssueReference)
 }
 
 /**
- * createDocumentationTask creates a documentation task in JIRA for a given correlated issue.
+ * createDocIssueComment creates a comment on a GitHub issue that references a documentation issue.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param issueId - The ID of the issue to comment on.
+ * @param docIssueKey - The key of the documentation issue to reference.
+ * @param content - The comment to add.
+ */
+export async function createDocIssueComment(toolkit: Toolkit, issueId: string, docIssueKey: string, content: string | null = null): Promise<GitHubComment> {
+    const commentBody = `${content ?? "A documentation Task has been created for this issue:"} [${docIssueKey}](https://${jiraHost}/browse/${docIssueKey}). <!-- ${docIssueReference} -->`;
+
+    const comment = await toolkit.github.graphql<{
+        addComment: {
+            commentEdge: {
+                node: GitHubComment
+            }
+        }
+    }>(`
+        mutation addComment($issueId: ID!, $body: String!) {
+            addComment(input: {
+                subjectId: $issueId,
+                body: $body
+            }) {
+                commentEdge {
+                    node {
+                        id
+                        author {
+                            login
+                        }
+                        body
+                        url
+                    }
+                }
+            }
+        }
+    `, {
+        issueId,
+        body: commentBody
+    }).then(res => res.addComment.commentEdge.node);
+
+    if (!comment || !comment.id) {
+        throw new Error(`Failed to create comment: ${JSON.stringify(comment)}`);
+    }
+
+    toolkit.core.info(`Created documentation issue reference comment: ${comment.url}`);
+
+    return comment;
+}
+
+/**
+ * createDocumentationTask creates a documentation task in JIRA for a given GitHub issue.
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  * @param issue - The issue to create a documentation task for.
  * @param documentationProjectId - The ID of the documentation project.
  * @param description - The description of the documentation task.
  */
-export async function createDocumentationTask(toolkit: Toolkit, issue: CorrelatedIssue, documentationProjectId: number | null = 11806, description: string | null = null) {
+export async function createDocumentationTask(toolkit: Toolkit, issue: GitHubIssue, documentationProjectId: number | null = 11806, description: string | null = null): Promise<JiraIssue> {
     const docTask = await toolkit.fetch(`${jiraBaseUrl}/issue`, {
         method: 'POST',
         headers: {
@@ -937,7 +997,7 @@ export async function createDocumentationTask(toolkit: Toolkit, issue: Correlate
                 project: {
                     id: documentationProjectId
                 },
-                summary: `${issue.github.title}`,
+                summary: `${issue.title}`,
                 description: {
                     version: 1,
                     type: "doc",
@@ -966,12 +1026,12 @@ export async function createDocumentationTask(toolkit: Toolkit, issue: Correlate
                                             content: [
                                                 {
                                                     type: "text",
-                                                    text: issue.github.url,
+                                                    text: issue.url,
                                                     marks: [
                                                         {
                                                             type: "link",
                                                             attrs: {
-                                                                href: issue.github.url,
+                                                                href: issue.url,
                                                             },
                                                         },
                                                     ],
@@ -979,29 +1039,7 @@ export async function createDocumentationTask(toolkit: Toolkit, issue: Correlate
                                             ],
                                         },
                                     ],
-                                },
-                                {
-                                    type: "listItem",
-                                    content: [
-                                        {
-                                            type: "paragraph",
-                                            content: [
-                                                {
-                                                    type: "text",
-                                                    text: issue.jira.key,
-                                                    marks: [
-                                                        {
-                                                            type: "link",
-                                                            attrs: {
-                                                                href: "https://shopware.atlassian.net/browse/" + issue.jira.key,
-                                                            },
-                                                        },
-                                                    ],
-                                                },
-                                            ],
-                                        },
-                                    ],
-                                },
+                                }
                             ],
                         }
                     ],
@@ -1009,25 +1047,17 @@ export async function createDocumentationTask(toolkit: Toolkit, issue: Correlate
                 issuetype: {
                     name: "Task",
                 },
-            },
-            update: {
-                issuelinks: [
-                    {
-                        add: {
-                            type: {
-                                name: "Relates",
-                            },
-                            inwardIssue: {
-                                key: issue.jira.key
-                            }
-                        }
-                    }
-                ],
             }
         })
     }).then(res => res.json());
 
-    toolkit.core.info(`Created documentation task in JIRA: https://shopware.atlassian.net/browse/${docTask.key}`);
+    if (!docTask || !docTask.key) {
+        throw new Error(`Failed to create documentation task: ${JSON.stringify(docTask)}`);
+    }
+
+    toolkit.core.info(`Created documentation task in JIRA: https://${jiraHost}/browse/${docTask.key}`);
+
+    return docTask;
 }
 
 /**
@@ -1037,15 +1067,23 @@ export async function createDocumentationTask(toolkit: Toolkit, issue: Correlate
  * @param projectNumbers - The project numbers to create documentation tasks for.
  * @param organization - The organization name whose projects to consider.
  * @param documentationProjectId - The ID of the documentation project.
- * @param description - The description of the documentation task.
+ * @param description - Prefix for the description of the documentation task.
+ * @param comment - Prefix for the documentation task reference comment.
  */
-export async function createDocumentationTasksForProjects(toolkit: Toolkit, projectNumbers: number[], organization: string | null = "shopware", documentationProjectId: number | null = 11806, description: string | null = null) {
+export async function createDocumentationTasksForProjects(toolkit: Toolkit, projectNumbers: number[], organization: string | null = "shopware", documentationProjectId: number | null = 11806, description: string | null = null, comment: string | null = null) {
     for (const projectNumber of projectNumbers) {
         const projectId = await getProjectIdByNumber(toolkit, projectNumber, organization);
-        const correlatedIssues = await correlateIssuesForProject(toolkit, projectId);
+        const epicsInProgress = await getEpicsInProgressByProject(toolkit, projectId);
 
-        for (const issue of correlatedIssues) {
-            await createDocumentationTask(toolkit, issue, documentationProjectId, description);
+        for (const epic of epicsInProgress) {
+            if (await hasDocIssueComment(toolkit, epic.id)) {
+                toolkit.core.info(`Skipping issue ${epic.url} because it already has a documentation issue reference.`);
+
+                continue;
+            }
+
+            const docTask = await createDocumentationTask(toolkit, epic, documentationProjectId, description);
+            await createDocIssueComment(toolkit, epic.id, docTask.key, comment);
         }
     }
 }
@@ -1101,7 +1139,7 @@ type Labelable = {
 async function manageNeedsTriageLabel(toolkit: Toolkit, labelable: Labelable, needsTriageLabel: Label, dryRun: boolean) {
     const labels = labelable.labels.nodes.map((label: { name: string }) => label.name);
     const hasNeedsTriage = labels.includes("needs-triage");
-    const hasDomainOrServiceLabel = labels.some((label: string) => 
+    const hasDomainOrServiceLabel = labels.some((label: string) =>
         label.startsWith("domain/") || label.startsWith("service/")
     );
 
@@ -1136,16 +1174,16 @@ async function manageNeedsTriageLabel(toolkit: Toolkit, labelable: Labelable, ne
 
 /**
  * Cleans up needs-triage in issues and pull requests
- * 
+ *
  * @param toolkit - The toolkit instance to interact with the project management system.
  * @param dryRun - If true, only log what would be done without making changes.
- * 
+ *
  * @remarks
  * This function finds all open issues and pull requests and ensures they have either:
  * - The needs-triage label, or
  * - A label starting with 'domain/' or 'service/'
  * - If an item has a `domain/` or `service/` label, remove the `needs-triage` label
- * 
+ *
  * Closed items are ignored. The function handles pagination to process all items.
  */
 export async function cleanupNeedsTriage(toolkit: Toolkit, dryRun: boolean = false) {

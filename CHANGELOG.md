@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/shopware/gh-project-automation/compare/v1.4.2...v1.5.0) (2025-05-23)
+
+
+### Features
+
+* add doc tasks for all epics in progress, that don't already reference one ([#21](https://github.com/shopware/gh-project-automation/issues/21)) ([eb5a9a0](https://github.com/shopware/gh-project-automation/commit/eb5a9a0ba4158a4730e1b0d5433a3e17f9ccfbaa))
+
 ## [1.4.2](https://github.com/shopware/gh-project-automation/compare/v1.4.1...v1.4.2) (2025-05-20)
 
 

@@ -41,18 +41,14 @@ export async function run(method: string, ...args: string[]) {
         case "getEpicsInProgressByProject":
             result = await automation.getEpicsInProgressByProject(toolkit, args[0]);
             break;
-        case "correlateGitHubIssueWithJiraEpic":
-            result = await automation.correlateGitHubIssueWithJiraEpic(toolkit, {
-                id: "awdawd",
-                title: args[0],
-                number: 0,
-                url: args[1],
-                status: "In Progress",
-                labels: []
-            });
+        case "getCommentsForIssue":
+            result = await automation.getCommentsForIssue(toolkit, args[0]);
             break;
-        case "correlateIssuesForProject":
-            result = await automation.correlateIssuesForProject(toolkit, args[0]);
+        case "hasDocIssueComment":
+            result = await automation.hasDocIssueComment(toolkit, args[0]);
+            break;
+        case "createDocIssueComment":
+            result = await automation.createDocIssueComment(toolkit, args[0], args[1]);
             break;
         case "createDocumentationTasksForProjects":
             result = await createDocumentationTasksForProjects(toolkit, args[0].split(",").map(i => parseInt(i)));
@@ -65,7 +61,7 @@ export async function run(method: string, ...args: string[]) {
             break;
     }
 
-    if (result) {
+    if (result !== undefined) {
         console.debug(result);
     }
 }

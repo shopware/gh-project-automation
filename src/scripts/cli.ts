@@ -56,6 +56,9 @@ export async function run(method: string, ...args: string[]) {
         case "cleanupNeedsTriage":
             result = await automation.cleanupNeedsTriage(toolkit, true);
             break;
+        case "getDevelopmentIssueForPullRequest":
+            result = await automation.getDevelopmentIssueForPullRequest(toolkit, args[0], parseInt(args[1]), args[2], args[3]);
+            break;
         default:
             console.warn("Unknown method");
             break;

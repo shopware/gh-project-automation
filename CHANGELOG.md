@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/shopware/gh-project-automation/compare/v1.5.0...v1.6.0) (2025-05-27)
+
+
+### Features
+
+* add method to fetch related issues by PR ([#23](https://github.com/shopware/gh-project-automation/issues/23)) ([c8b6eab](https://github.com/shopware/gh-project-automation/commit/c8b6eabe1bb8965047ac2700c64f554e58a41178))
+
 ## [1.5.0](https://github.com/shopware/gh-project-automation/compare/v1.4.2...v1.5.0) (2025-05-23)
 
 

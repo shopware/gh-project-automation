@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/shopware/gh-project-automation/compare/v1.6.0...v1.6.1) (2025-05-28)
+
+
+### Bug Fixes
+
+* return repository information when searching for related issues ([#25](https://github.com/shopware/gh-project-automation/issues/25)) ([2d2fe3e](https://github.com/shopware/gh-project-automation/commit/2d2fe3e19425e008bbad21804d8d9523fe6af60b))
+
 ## [1.6.0](https://github.com/shopware/gh-project-automation/compare/v1.5.0...v1.6.0) (2025-05-27)
 
 

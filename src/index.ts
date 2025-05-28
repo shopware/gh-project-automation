@@ -24,6 +24,8 @@ type GitHubIssue = {
     status?: string
     labels: Label[]
     type?: string
+    owner?: string
+    repository?: string
 }
 
 type GitHubComment = {
@@ -1309,12 +1311,24 @@ export async function getDevelopmentIssueForPullRequest(toolkit: Toolkit, repo: 
                 title: string,
                 number: number,
                 url: string,
+                repository: {
+                    owner: {
+                        login: string
+                    },
+                    name: string
+                },
                 closingIssuesReferences: {
                     nodes: [{
                         id: string,
                         title: string,
                         number: number,
-                        url: string
+                        url: string,
+                        repository: {
+                            owner: {
+                                login: string
+                            },
+                            name: string
+                        }
                     }]
                 }
             }]
@@ -1334,12 +1348,24 @@ export async function getDevelopmentIssueForPullRequest(toolkit: Toolkit, repo: 
             title
             number
             url
+            repository {
+              owner {
+                login
+              }
+              name
+            }
             closingIssuesReferences(first: 1) {
               nodes {
                 id
                 title
                 number
                 url
+                repository {
+                  owner {
+                    login
+                  }
+                  name
+                }
               }
             }
           }
@@ -1358,7 +1384,9 @@ export async function getDevelopmentIssueForPullRequest(toolkit: Toolkit, repo: 
             title: developmentIssue.title,
             number: developmentIssue.number,
             url: developmentIssue.url,
-            labels: []
+            labels: [],
+            owner: developmentIssue.repository.owner.login,
+            repository: developmentIssue.repository.name
         };
     } else {
         toolkit.core.info(`No development issue found for PR #${pullRequestNumber}`);

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/shopware/gh-project-automation/compare/v1.6.1...v1.6.2) (2025-06-04)
+
+
+### Bug Fixes
+
+* getProjectInfo variable ([#27](https://github.com/shopware/gh-project-automation/issues/27)) ([45d5b7b](https://github.com/shopware/gh-project-automation/commit/45d5b7be462fdf9715e9911c41ca29e581f1c21b))
+
 ## [1.6.1](https://github.com/shopware/gh-project-automation/compare/v1.6.0...v1.6.1) (2025-05-28)
 
 

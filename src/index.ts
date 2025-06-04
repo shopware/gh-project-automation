@@ -297,7 +297,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
         `,
         {
             organization: data.organization ?? "shopware",
-            number: data.number,
+            projectNumber: data.number,
         }
     )
 

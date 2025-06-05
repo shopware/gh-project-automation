@@ -6,21 +6,6 @@ import * as glob from "@actions/glob";
 import * as io from "@actions/io";
 import fetch from "node-fetch";
 
-import {
-    cleanupNeedsTriage,
-    createDocIssueComment,
-    createDocumentationTasksForProjects,
-    getDevelopmentIssueForPullRequest,
-    getEpicsInProgressByProject,
-    hasDocIssueComment
-} from "../index";
-
-import {
-    getCommentsForIssue,
-    getIssuesByProject,
-    getProjectIdByNumber
-} from "../api/github";
-
 const toolkit = {
     github: getOctokit(process.env.GITHUB_TOKEN ?? ""),
     context: new Context(),
@@ -30,6 +15,8 @@ const toolkit = {
     io: io,
     fetch: fetch,
 }
+
+import * as automation from "../index";
 
 /**
  * Run the automation functions from the command line.
@@ -46,31 +33,31 @@ export async function run(method: string, ...args: string[]) {
 
     switch (method) {
         case "getProjectIdByNumber":
-            result = await getProjectIdByNumber(toolkit, parseInt(args[0]), "shopware");
+            result = await automation.getProjectIdByNumber(toolkit, parseInt(args[0]), "shopware");
             break;
         case "getIssuesByProject":
-            result = await getIssuesByProject(toolkit, args[0], null, null);
+            result = await automation.getIssuesByProject(toolkit, args[0], null, null);
             break;
         case "getEpicsInProgressByProject":
-            result = await getEpicsInProgressByProject(toolkit, args[0]);
+            result = await automation.getEpicsInProgressByProject(toolkit, args[0]);
             break;
         case "getCommentsForIssue":
-            result = await getCommentsForIssue(toolkit, args[0]);
+            result = await automation.getCommentsForIssue(toolkit, args[0]);
             break;
         case "hasDocIssueComment":
-            result = await hasDocIssueComment(toolkit, args[0]);
+            result = await automation.hasDocIssueComment(toolkit, args[0]);
             break;
         case "createDocIssueComment":
-            result = await createDocIssueComment(toolkit, args[0], args[1]);
+            result = await automation.createDocIssueComment(toolkit, args[0], args[1]);
             break;
         case "createDocumentationTasksForProjects":
-            result = await createDocumentationTasksForProjects(toolkit, args[0].split(",").map(i => parseInt(i)));
+            result = await automation.createDocumentationTasksForProjects(toolkit, args[0].split(",").map(i => parseInt(i)));
             break;
         case "cleanupNeedsTriage":
-            result = await cleanupNeedsTriage(toolkit, true);
+            result = await automation.cleanupNeedsTriage(toolkit, true);
             break;
         case "getDevelopmentIssueForPullRequest":
-            result = await getDevelopmentIssueForPullRequest(toolkit, args[0], parseInt(args[1]), args[2], args[3]);
+            result = await automation.getDevelopmentIssueForPullRequest(toolkit, args[0], parseInt(args[1]), args[2], args[3]);
             break;
         default:
             console.warn("Unknown method");

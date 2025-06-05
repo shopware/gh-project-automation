@@ -1,4 +1,4 @@
-import {GitHubComment, GitHubIssue, Label, Toolkit} from "../../types";
+import {GitHubComment, GitHubIssue, Label, Toolkit} from "../types";
 
 export async function closeIssue(toolkit: Toolkit, issueId: string) {
     const res = await toolkit.github.graphql(`
@@ -563,4 +563,42 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string) {
         }).then(res => res.search.nodes);
 
     return pullRequests;
+}
+
+export async function addComment(toolkit: Toolkit, issueId: string, commentBody: string): Promise<GitHubComment> {
+    const comment = await toolkit.github.graphql<{
+        addComment: {
+            commentEdge: {
+                node: GitHubComment
+            }
+        }
+    }>(`
+        mutation addComment($issueId: ID!, $body: String!) {
+            addComment(input: {
+                subjectId: $issueId,
+                body: $body
+            }) {
+                commentEdge {
+                    node {
+                        id
+                        author {
+                            login
+                        }
+                        body
+                        url
+                    }
+                }
+            }
+        }
+    `,
+        {
+            issueId,
+            body: commentBody
+        }).then(res => res.addComment.commentEdge.node);
+
+    if (!comment || !comment.id) {
+        throw new Error(`Failed to create comment: ${JSON.stringify(comment)}`);
+    }
+
+    return comment;
 }

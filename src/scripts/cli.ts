@@ -6,7 +6,15 @@ import * as exec from "@actions/exec";
 import * as glob from "@actions/glob";
 import * as io from "@actions/io";
 import fetch from "node-fetch";
+
 import {createDocumentationTasksForProjects} from "../index";
+
+import {
+    getCommentsForIssue,
+    getDevelopmentIssueForPullRequest,
+    getIssuesByProject,
+    getProjectIdByNumber
+} from "../api/github";
 
 const toolkit = {
     github: getOctokit(process.env.GITHUB_TOKEN ?? ""),
@@ -33,16 +41,16 @@ export async function run(method: string, ...args: string[]) {
 
     switch (method) {
         case "getProjectIdByNumber":
-            result = await automation.getProjectIdByNumber(toolkit, parseInt(args[0]), "shopware");
+            result = await getProjectIdByNumber(toolkit, parseInt(args[0]), "shopware");
             break;
         case "getIssuesByProject":
-            result = await automation.getIssuesByProject(toolkit, args[0], null, null);
+            result = await getIssuesByProject(toolkit, args[0], null, null);
             break;
         case "getEpicsInProgressByProject":
             result = await automation.getEpicsInProgressByProject(toolkit, args[0]);
             break;
         case "getCommentsForIssue":
-            result = await automation.getCommentsForIssue(toolkit, args[0]);
+            result = await getCommentsForIssue(toolkit, args[0]);
             break;
         case "hasDocIssueComment":
             result = await automation.hasDocIssueComment(toolkit, args[0]);
@@ -57,7 +65,7 @@ export async function run(method: string, ...args: string[]) {
             result = await automation.cleanupNeedsTriage(toolkit, true);
             break;
         case "getDevelopmentIssueForPullRequest":
-            result = await automation.getDevelopmentIssueForPullRequest(toolkit, args[0], parseInt(args[1]), args[2], args[3]);
+            result = await getDevelopmentIssueForPullRequest(toolkit, args[0], parseInt(args[1]), args[2], args[3]);
             break;
         default:
             console.warn("Unknown method");

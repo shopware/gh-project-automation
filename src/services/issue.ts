@@ -14,8 +14,9 @@ import {
     getCommentsForIssue,
     getIssuesByProject,
     getLabelByName,
-    getPullRequests
-} from "../api/github";
+    getPullRequests,
+    SlackClient
+} from "../api";
 import {jiraHost} from "../index";
 
 export const docIssueReference = Buffer.from("doc-issue-created").toString("base64");
@@ -276,4 +277,23 @@ export async function findWithProjectItems(toolkit: Toolkit) {
     } else {
         throw new Error('only issue and pull_request events are supported');
     }
+}
+
+export async function pingAssigneesOfOldPullRequests(toolkit: Toolkit, days: number = 7) {
+    const pullRequests = await getPullRequests(
+        toolkit,
+        `is:pr is:open updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
+    );
+
+    if (process.env.SLACK_TOKEN === undefined) {
+        throw new Error("SLACK_TOKEN environment variable is not set");
+    }
+
+    const slackClient = new SlackClient(process.env.SLACK_TOKEN);
+
+    for (const pr of pullRequests) {
+        slackClient.getUserByEmail(pr.assignees.nodes[0].email)
+    }
+
+    toolkit.core.info(`Finished pinging assignees of old pull requests.`);
 }

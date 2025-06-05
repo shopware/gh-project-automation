@@ -609,3 +609,77 @@ export async function addComment(toolkit: Toolkit, issueId: string, commentBody:
 
     return comment;
 }
+
+export async function getEnterpriseInfo(toolkit: Toolkit, enterprise: string, cursor: string | null = null, carry: object[] | null = null) {
+    const res = await toolkit.github.graphql<{
+        enterprise: {
+            ownerInfo: {
+                samlIdentityProvider: {
+                    externalIdentities: {
+                        totalCount: number,
+                        pageInfo: {
+                            hasNextPage: boolean,
+                            endCursor: string
+                        },
+                        edges: Array<{
+                            node: {
+                                user: {
+                                    id: string,
+                                    login: string
+                                },
+                                samlIdentity: {
+                                    nameId: string
+                                }
+                            }
+                        }>
+                    }
+                }
+            }
+        }
+    }>(`
+        #graphql
+        query($enterprise: String!, $ssoCursor: String) {
+            enterprise(slug: $enterprise) {
+                ownerInfo {
+                    samlIdentityProvider {
+                        externalIdentities(after: $ssoCursor, first: 100) {
+                            totalCount
+                            pageInfo {
+                                hasNextPage
+                                endCursor
+                            }
+                            edges {
+                                node {
+                                    user {
+                                        id
+                                        login
+                                    }
+                                    samlIdentity {
+                                        nameId
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    `, {
+        enterprise: enterprise,
+        ssoCursor: cursor
+    })
+
+    toolkit.core.debug(`getEnterpriseInfo response: ${JSON.stringify(res)}`);
+
+    const externalIdentities = res.enterprise.ownerInfo.samlIdentityProvider.externalIdentities.edges.map(edge => ({
+        userId: edge.node.user.id,
+        userLogin: edge.node.user.login,
+        nameId: edge.node.samlIdentity.nameId
+    }));
+
+    if (res.enterprise.ownerInfo.samlIdentityProvider.externalIdentities.pageInfo.hasNextPage) {
+        return await getEnterpriseInfo(toolkit, enterprise, res.enterprise.ownerInfo.samlIdentityProvider.externalIdentities.pageInfo.endCursor, [...externalIdentities, ...(carry ?? [])]);
+    } else {
+        return [...externalIdentities, ...(carry ?? [])];
+    }
+}

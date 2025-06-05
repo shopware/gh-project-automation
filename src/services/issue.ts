@@ -6,6 +6,7 @@ import {
     QueryResponse,
     Toolkit
 } from "../types";
+
 import {
     addComment,
     addLabelToLabelable,
@@ -14,9 +15,11 @@ import {
     getCommentsForIssue,
     getIssuesByProject,
     getLabelByName,
-    getPullRequests
-} from "../api/github";
-import {jiraHost} from "../index";
+    getPullRequests,
+    jiraHost
+} from "../api";
+
+import {sendSlackMessageForGithubUser} from "./slack";
 
 export const docIssueReference = Buffer.from("doc-issue-created").toString("base64");
 
@@ -273,4 +276,24 @@ export async function findWithProjectItems(toolkit: Toolkit) {
     } else {
         throw new Error('only issue and pull_request events are supported');
     }
+}
+
+export async function pingAssigneesOfOldPullRequests(toolkit: Toolkit, days: number = 7) {
+    const pullRequests = await getPullRequests(
+        toolkit,
+        `is:pr is:open updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
+    );
+
+    for (const pr of pullRequests) {
+        const assignee = pr.assignees.nodes[0];
+
+        if (!assignee) {
+            toolkit.core.info(`Pull request #${pr.number} has no assignee, skipping.`);
+            continue;
+        }
+
+        await sendSlackMessageForGithubUser(toolkit, assignee.login, `Hey <@${assignee.login}>, the pull request #${pr.number} (${pr.title}) has not been updated for more than ${days} days. Please check it out!`);
+    }
+
+    toolkit.core.info(`Finished pinging assignees of old pull requests.`);
 }

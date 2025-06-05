@@ -132,6 +132,7 @@ async function manageNeedsTriageLabel(toolkit: Toolkit, labelable: Labelable, ne
             toolkit.core.info(`Would remove needs-triage label from #${labelable.number}: ${labelable.title} (has domain/service label)`);
         } else {
             await toolkit.github.graphql(`
+                #graphql
                 mutation removeLabel($labelableId: ID!, $labelIds: [ID!]!) {
                     removeLabelsFromLabelable(input: {
                         labelableId: $labelableId,
@@ -184,6 +185,7 @@ export async function cleanupNeedsTriage(toolkit: Toolkit, dryRun: boolean = fal
 
     while (hasNextPageIssues) {
         const res: QueryResponse = await toolkit.github.graphql<QueryResponse>(`
+            #graphql
             query getOpenIssues($cursor: String) {
                 repository(owner: "shopware", name: "shopware") {
                     issues(first: 100, after: $cursor, states: OPEN) {
@@ -226,6 +228,7 @@ export async function cleanupNeedsTriage(toolkit: Toolkit, dryRun: boolean = fal
 
     while (hasNextPagePRs) {
         const res: QueryResponse = await toolkit.github.graphql<QueryResponse>(`
+            #graphql
             query getOpenPRs($cursor: String) {
                 repository(owner: "shopware", name: "shopware") {
                     pullRequests(first: 100, after: $cursor, states: OPEN) {
@@ -273,4 +276,16 @@ export async function findWithProjectItems(toolkit: Toolkit) {
     } else {
         throw new Error('only issue and pull_request events are supported');
     }
+}
+
+export async function pingAssigneesOfOldPullRequests(toolkit: Toolkit, days: number = 7) {
+    const pullRequests = await getPullRequests(
+        toolkit,
+        `is:pr is:open updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
+    );
+
+    for (const pr of pullRequests) {
+
+    }
+    toolkit.core.info(`Finished pinging assignees of old pull requests.`);
 }

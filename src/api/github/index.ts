@@ -1,15 +1,16 @@
 import {GitHubComment, GitHubIssue, Label, Toolkit} from "../../types";
 
 export async function closeIssue(toolkit: Toolkit, issueId: string) {
-    const res = await toolkit.github.graphql(
-            `mutation closeIssue($issueId: ID!) {
+    const res = await toolkit.github.graphql(`
+        mutation closeIssue($issueId: ID!) {
             closeIssue(input: {
                 issueId: $issueId,
                 stateReason:NOT_PLANNED
             }) {
                 clientMutationId
             }
-        }`,
+        }
+    `,
         {
             issueId: issueId
         }
@@ -47,15 +48,16 @@ export async function getLabelByName(toolkit: Toolkit, repository: string, label
 export async function addLabelToLabelable(toolkit: Toolkit, labelId: string, labelableId: string) {
     const res = await toolkit.github.graphql<{
         clientMutationId: string
-    }>(
-            `mutation($labelId: ID!, $labelableId: ID!) {
+    }>(`
+        mutation($labelId: ID!, $labelableId: ID!) {
             addLabelsToLabelable(input: {
                 labelIds: [$labelId],
                 labelableId: $labelableId
             }) {
                 clientMutationId
             }
-        }`,
+        }
+    `,
         {
             labelId: labelId,
             labelableId: labelableId
@@ -80,8 +82,8 @@ export async function findIssueWithProjectItems(toolkit: Toolkit, number: number
                 number: number,
             }
         }
-    }>(
-            `query findIssueWithProjectItems($number: Int!) {
+    }>(`
+        query findIssueWithProjectItems($number: Int!) {
             repository(owner: "shopware", name: "shopware") {
                 issue(number: $number) {
                     projectItems(first: 20) {
@@ -101,7 +103,8 @@ export async function findIssueWithProjectItems(toolkit: Toolkit, number: number
                     number
                 }
             }
-        }`,
+        }
+    `,
         {
             number,
         }
@@ -130,8 +133,8 @@ export async function findPRWithProjectItems(toolkit: Toolkit, number: number) {
                 number: number,
             }
         }
-    }>(
-            `query findPRWithProjectItems($number: Int!) {
+    }>(`
+        query findPRWithProjectItems($number: Int!) {
             repository(owner: "shopware", name: "shopware") {
                 pullRequest(number: $number) {
                     projectItems(first: 20) {
@@ -150,7 +153,8 @@ export async function findPRWithProjectItems(toolkit: Toolkit, number: number) {
                     number
                 }
             }
-        }`,
+        }
+    `,
         {
             number,
         }
@@ -171,8 +175,8 @@ export async function setFieldValue(toolkit: Toolkit, data: {
     fieldId: string,
     valueId: string
 }) {
-    const res = await toolkit.github.graphql(
-            `mutation setFieldValue($projectId: ID!, $itemId: ID!, $fieldId: ID!, $valueId: String!) {
+    const res = await toolkit.github.graphql(`
+        mutation setFieldValue($projectId: ID!, $itemId: ID!, $fieldId: ID!, $valueId: String!) {
             updateProjectV2ItemFieldValue(input: {
                 projectId: $projectId,
                 itemId: $itemId,
@@ -183,7 +187,8 @@ export async function setFieldValue(toolkit: Toolkit, data: {
                     id
                 }
             }
-        }`,
+        }
+    `,
         data
     )
 
@@ -213,28 +218,27 @@ export async function getProjectInfo(toolkit: Toolkit, data: {
             }
         }
     };
-    const res = await toolkit.github.graphql<getProjectInfo>(
-            `
-            query getProjectInfo($organization: String!, $projectNumber: Int!) {
-                organization(login: $organization) {
-                    projectV2(number: $projectNumber) {
-                        id
-                        fields(first: 20) {
-                            nodes {
-                                ... on ProjectV2SingleSelectField {
+    const res = await toolkit.github.graphql<getProjectInfo>(`
+        query getProjectInfo($organization: String!, $projectNumber: Int!) {
+            organization(login: $organization) {
+                projectV2(number: $projectNumber) {
+                    id
+                    fields(first: 20) {
+                        nodes {
+                            ... on ProjectV2SingleSelectField {
+                                id
+                                name
+                                options {
                                     id
                                     name
-                                    options {
-                                        id
-                                        name
-                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        `,
+        }
+    `,
         {
             organization: data.organization ?? "shopware",
             projectNumber: data.number,
@@ -257,8 +261,8 @@ export async function addProjectItem(toolkit: Toolkit, data: {
 }) {
     const res = await toolkit.github.graphql<{
         addProjectV2ItemById: { item: { id: string } }
-    }>(
-            `mutation addProjectItem($projectId: ID!, $contentId: ID!) {
+    }>(`
+        mutation addProjectItem($projectId: ID!, $contentId: ID!) {
             addProjectV2ItemById(input: {
                 projectId: $projectId,
                 contentId: $contentId
@@ -268,7 +272,7 @@ export async function addProjectItem(toolkit: Toolkit, data: {
                 }
             }
         }
-        `,
+    `,
         {
             projectId: data.projectId,
             contentId: data.issueId
@@ -304,10 +308,11 @@ export async function getProjectIdByNumber(toolkit: Toolkit, number: number, org
                 }
             }
         }
-    `, {
-        organization: organization,
-        number: number
-    });
+    `,
+        {
+            organization: organization,
+            number: number
+        });
 
     return res.organization.projectV2.id;
 }
@@ -383,11 +388,12 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cu
                 }
             }
         }
-    `, {
-        projectId,
-        count: 100,
-        cursor: cursor
-    });
+    `,
+        {
+            projectId,
+            count: 100,
+            cursor: cursor
+        });
 
     const issues = res.node.items.nodes.map((item) => {
         return {
@@ -455,11 +461,12 @@ export async function getCommentsForIssue(toolkit: Toolkit, issueId: string, cur
                 }
             }
         }
-    `, {
-        issueId,
-        count: 100,
-        cursor: cursor
-    })
+    `,
+        {
+            issueId,
+            count: 100,
+            cursor: cursor
+        })
 
     const comments = res.node.comments.nodes;
 
@@ -471,20 +478,12 @@ export async function getCommentsForIssue(toolkit: Toolkit, issueId: string, cur
 }
 
 /**
- * getDevelopmentIssueForPullRequest fetches the development issue linked to a pull request.
- *
- * @remarks
- * This function searches for pull requests in the Shopware organization that match the given head and assignee.
- * It retrieves the first closing issue reference from the matching pull requests.
- * If a matching development issue is found, it returns the issue details; otherwise, it returns null.
+ * Gets pull requests matching the given search criteria
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
- * @param repo - The repository to search in, formatted as "owner/repo".
- * @param pullRequestNumber - The number of the pull request to search for.
- * @param pullRequestHead - The head branch of the pull request.
- * @param pullRequestAssignee - The assignee of the pull request.
+ * @param searchQuery - The GitHub search query to use
  */
-export async function getDevelopmentIssueForPullRequest(toolkit: Toolkit, repo: string, pullRequestNumber: number, pullRequestHead: string, pullRequestAssignee: string): Promise<GitHubIssue | null> {
+export async function getPullRequests(toolkit: Toolkit, searchQuery: string) {
     const pullRequests = await toolkit.github.graphql<{
         search: {
             pageInfo: {
@@ -521,7 +520,7 @@ export async function getDevelopmentIssueForPullRequest(toolkit: Toolkit, repo: 
             }]
         }
     }>(`
-        query findLinkedIssues($searchQuery: String!) {
+        query findPullRequests($searchQuery: String!) {
             search(query: $searchQuery, type: ISSUE, first: 50) {
                 pageInfo {
                     startCursor
@@ -558,25 +557,10 @@ export async function getDevelopmentIssueForPullRequest(toolkit: Toolkit, repo: 
                     }
                 }
             }
-        }`, {
-        searchQuery: `repo:${repo} is:pr assignee:${pullRequestAssignee} head:${pullRequestHead}`
-    }).then(res => res.search.nodes);
+        }`,
+        {
+            searchQuery
+        }).then(res => res.search.nodes);
 
-    const matchingPullRequests = pullRequests.filter(pr => pr.number === pullRequestNumber);
-    const developmentIssue = matchingPullRequests.length > 0 ? matchingPullRequests[0]?.closingIssuesReferences?.nodes[0] : null;
-
-    if (developmentIssue) {
-        return {
-            id: developmentIssue.id,
-            title: developmentIssue.title,
-            number: developmentIssue.number,
-            url: developmentIssue.url,
-            labels: [],
-            owner: developmentIssue.repository.owner.login,
-            repository: developmentIssue.repository.name
-        };
-    } else {
-        toolkit.core.info(`No development issue found for PR #${pullRequestNumber}`);
-        return null;
-    }
+    return pullRequests;
 }

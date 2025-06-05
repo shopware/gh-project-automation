@@ -26,6 +26,8 @@ const jiraHost = "shopware.atlassian.net";
 const jiraBaseUrl = `https://${jiraHost}/rest/api/3`;
 const docIssueReference = Buffer.from("doc-issue-created").toString("base64");
 
+export * from './services/issues';
+
 export async function findWithProjectItems(toolkit: Toolkit) {
     if (toolkit.context.payload.issue) {
         return await findIssueWithProjectItems(toolkit, toolkit.context.payload.issue.number);

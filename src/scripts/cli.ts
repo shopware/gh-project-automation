@@ -1,4 +1,3 @@
-import * as automation from "../index";
 import {getOctokit} from "@actions/github";
 import {Context} from "@actions/github/lib/context";
 import * as core from "@actions/core";
@@ -7,11 +6,17 @@ import * as glob from "@actions/glob";
 import * as io from "@actions/io";
 import fetch from "node-fetch";
 
-import {createDocumentationTasksForProjects} from "../index";
+import {
+    cleanupNeedsTriage,
+    createDocIssueComment,
+    createDocumentationTasksForProjects,
+    getDevelopmentIssueForPullRequest,
+    getEpicsInProgressByProject,
+    hasDocIssueComment
+} from "../index";
 
 import {
     getCommentsForIssue,
-    getDevelopmentIssueForPullRequest,
     getIssuesByProject,
     getProjectIdByNumber
 } from "../api/github";
@@ -47,22 +52,22 @@ export async function run(method: string, ...args: string[]) {
             result = await getIssuesByProject(toolkit, args[0], null, null);
             break;
         case "getEpicsInProgressByProject":
-            result = await automation.getEpicsInProgressByProject(toolkit, args[0]);
+            result = await getEpicsInProgressByProject(toolkit, args[0]);
             break;
         case "getCommentsForIssue":
             result = await getCommentsForIssue(toolkit, args[0]);
             break;
         case "hasDocIssueComment":
-            result = await automation.hasDocIssueComment(toolkit, args[0]);
+            result = await hasDocIssueComment(toolkit, args[0]);
             break;
         case "createDocIssueComment":
-            result = await automation.createDocIssueComment(toolkit, args[0], args[1]);
+            result = await createDocIssueComment(toolkit, args[0], args[1]);
             break;
         case "createDocumentationTasksForProjects":
             result = await createDocumentationTasksForProjects(toolkit, args[0].split(",").map(i => parseInt(i)));
             break;
         case "cleanupNeedsTriage":
-            result = await automation.cleanupNeedsTriage(toolkit, true);
+            result = await cleanupNeedsTriage(toolkit, true);
             break;
         case "getDevelopmentIssueForPullRequest":
             result = await getDevelopmentIssueForPullRequest(toolkit, args[0], parseInt(args[1]), args[2], args[3]);

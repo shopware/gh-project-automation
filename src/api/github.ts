@@ -2,6 +2,7 @@ import {GitHubComment, GitHubIssue, Label, Toolkit} from "../types";
 
 export async function closeIssue(toolkit: Toolkit, issueId: string) {
     const res = await toolkit.github.graphql(`
+        #graphql
         mutation closeIssue($issueId: ID!) {
             closeIssue(input: {
                 issueId: $issueId,
@@ -25,6 +26,7 @@ export async function getLabelByName(toolkit: Toolkit, repository: string, label
             label?: Label
         }
     }>(`
+        #graphql
         query getLabelId($repository: String!, $labelName: String!) {
             repository(owner: "shopware", name: $repository) {
                 label(name: $labelName) {
@@ -49,6 +51,7 @@ export async function addLabelToLabelable(toolkit: Toolkit, labelId: string, lab
     const res = await toolkit.github.graphql<{
         clientMutationId: string
     }>(`
+        #graphql
         mutation($labelId: ID!, $labelableId: ID!) {
             addLabelsToLabelable(input: {
                 labelIds: [$labelId],
@@ -83,6 +86,7 @@ export async function findIssueWithProjectItems(toolkit: Toolkit, number: number
             }
         }
     }>(`
+        #graphql
         query findIssueWithProjectItems($number: Int!) {
             repository(owner: "shopware", name: "shopware") {
                 issue(number: $number) {
@@ -134,6 +138,7 @@ export async function findPRWithProjectItems(toolkit: Toolkit, number: number) {
             }
         }
     }>(`
+        #graphql
         query findPRWithProjectItems($number: Int!) {
             repository(owner: "shopware", name: "shopware") {
                 pullRequest(number: $number) {
@@ -176,6 +181,7 @@ export async function setFieldValue(toolkit: Toolkit, data: {
     valueId: string
 }) {
     const res = await toolkit.github.graphql(`
+        #graphql
         mutation setFieldValue($projectId: ID!, $itemId: ID!, $fieldId: ID!, $valueId: String!) {
             updateProjectV2ItemFieldValue(input: {
                 projectId: $projectId,
@@ -219,6 +225,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: {
         }
     };
     const res = await toolkit.github.graphql<getProjectInfo>(`
+        #graphql
         query getProjectInfo($organization: String!, $projectNumber: Int!) {
             organization(login: $organization) {
                 projectV2(number: $projectNumber) {
@@ -262,6 +269,7 @@ export async function addProjectItem(toolkit: Toolkit, data: {
     const res = await toolkit.github.graphql<{
         addProjectV2ItemById: { item: { id: string } }
     }>(`
+        #graphql
         mutation addProjectItem($projectId: ID!, $contentId: ID!) {
             addProjectV2ItemById(input: {
                 projectId: $projectId,
@@ -301,6 +309,7 @@ export async function getProjectIdByNumber(toolkit: Toolkit, number: number, org
             }
         }
     }>(`
+        #graphql
         query getProjectIdByNumber($organization: String!, $number: Int!) {
             organization(login: $organization) {
                 projectV2(number: $number) {
@@ -356,6 +365,7 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cu
             }
         }
     }>(`
+        #graphql
         query getIssuesByProject($projectId: ID!, $count: Int, $cursor: String) {
             node(id: $projectId) {
                 ... on ProjectV2 {
@@ -440,6 +450,7 @@ export async function getCommentsForIssue(toolkit: Toolkit, issueId: string, cur
             }
         }
     }>(`
+        #graphql
         query getCommentsForIssue($issueId: ID!, $count: Int, $cursor: String) {
             node(id: $issueId) {
                 ... on Issue {
@@ -483,43 +494,21 @@ export async function getCommentsForIssue(toolkit: Toolkit, issueId: string, cur
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  * @param searchQuery - The GitHub search query to use
  */
-export async function getPullRequests(toolkit: Toolkit, searchQuery: string) {
-    const pullRequests = await toolkit.github.graphql<{
-        search: {
-            pageInfo: {
-                startCursor: string,
-                endCursor: string,
-                hasPreviousPage: boolean,
-                hasNextPage: boolean
-            },
-            nodes: [{
-                id: string,
-                title: string,
-                number: number,
-                url: string,
-                repository: {
-                    owner: {
-                        login: string
-                    },
-                    name: string
+export async function getPullRequests(toolkit: Toolkit, searchQuery: string): Promise<GitHubIssue[]> {
+    const pullRequests = await toolkit.github.graphql<
+        {
+            search: {
+                pageInfo: {
+                    startCursor: string,
+                    endCursor: string,
+                    hasPreviousPage: boolean,
+                    hasNextPage: boolean
                 },
-                closingIssuesReferences: {
-                    nodes: [{
-                        id: string,
-                        title: string,
-                        number: number,
-                        url: string,
-                        repository: {
-                            owner: {
-                                login: string
-                            },
-                            name: string
-                        }
-                    }]
-                }
-            }]
+                nodes: GitHubIssue[]
+            }
         }
-    }>(`
+    >(`
+        #graphql
         query findPullRequests($searchQuery: String!) {
             search(query: $searchQuery, type: ISSUE, first: 50) {
                 pageInfo {
@@ -539,6 +528,23 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string) {
                                 login
                             }
                             name
+                        }
+                        assignees(first: 50) {
+                            nodes {
+                                login
+                            }
+                        }
+                        reviewRequests(first: 50) {
+                            nodes {
+                                requestedReviewer {
+                                    ... on User {
+                                        login
+                                    }
+                                    ... on Team {
+                                        name
+                                    }
+                                }
+                            }
                         }
                         closingIssuesReferences(first: 1) {
                             nodes {
@@ -573,6 +579,7 @@ export async function addComment(toolkit: Toolkit, issueId: string, commentBody:
             }
         }
     }>(`
+        #graphql
         mutation addComment($issueId: ID!, $body: String!) {
             addComment(input: {
                 subjectId: $issueId,

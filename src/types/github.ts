@@ -8,6 +8,13 @@ export type GitHubIssue = {
     type?: string
     owner?: string
     repository?: string
+    assignees?: {
+        login: string
+    }
+    reviewRequests?: {
+        login: string
+    }
+    closingIssuesReferences?: GitHubIssue
 }
 
 export type GitHubComment = {

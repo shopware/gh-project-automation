@@ -9,7 +9,7 @@ import {
     getProjectIdByNumber,
     getProjectInfo,
     setFieldValue
-} from "../api/github";
+} from "../api";
 
 import {
     createDocIssueComment, findWithProjectItems,
@@ -167,6 +167,7 @@ export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, d
     switch (Number(projectNumber)) {
         case 27: {
             const query = `
+                #graphql
                 query {
                     search(
                       type: ISSUE
@@ -303,6 +304,7 @@ export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
     const closeDate = now.toISOString().split('T')[0];
 
     const query = `
+        #graphql
         query {
             search(
               type: ISSUE

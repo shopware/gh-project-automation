@@ -14,7 +14,6 @@ export type GitHubIssue = {
     reviewRequests?: {
         login: string
     }
-    closingIssuesReferences?: GitHubIssue
 }
 
 export type GitHubComment = {

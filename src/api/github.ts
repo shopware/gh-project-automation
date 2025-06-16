@@ -494,7 +494,7 @@ export async function getCommentsForIssue(toolkit: Toolkit, issueId: string, cur
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  * @param searchQuery - The GitHub search query to use
  */
-export async function getPullRequests(toolkit: Toolkit, searchQuery: string): Promise<GitHubIssue[]> {
+export async function getPullRequests(toolkit: Toolkit, searchQuery: string) {
     const pullRequests = await toolkit.github.graphql<
         {
             search: {
@@ -504,7 +504,47 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string): Pr
                     hasPreviousPage: boolean,
                     hasNextPage: boolean
                 },
-                nodes: GitHubIssue[]
+                nodes: [
+                    {
+                        id: string,
+                        title: string,
+                        number: number,
+                        url: string,
+                        repository: {
+                            owner: {
+                                login: string
+                            },
+                            name: string
+                        },
+                        assignees: {
+                            nodes: [{
+                                login: string
+                            }]
+                        },
+                        reviewRequests: {
+                            nodes: [{
+                                requestedReviewer: {
+                                    login?: string,
+                                    name?: string
+                                }
+                            }]
+                        },
+                        closingIssuesReferences: {
+                            nodes: [{
+                                id: string,
+                                title: string,
+                                number: number,
+                                url: string,
+                                repository: {
+                                    owner: {
+                                        login: string
+                                    },
+                                    name: string
+                                }
+                            }]
+                        }
+                    }
+                ]
             }
         }
     >(`

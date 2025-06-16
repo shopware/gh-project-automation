@@ -260,6 +260,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
         organization: {
             projectV2: {
                 id: string,
+                title: string,
                 fields: {
                     nodes: [{
                         id: string,
@@ -279,6 +280,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
           organization(login: $organization) {
             projectV2(number: $projectNumber) {
               id
+              title
               fields(first: 20) {
                 nodes {
                   ... on ProjectV2SingleSelectField {
@@ -307,6 +309,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: { number: number, o
 
     return {
         node_id: project.id,
+        title: project.title,
         fields: project.fields.nodes,
     }
 }
@@ -396,19 +399,9 @@ export async function setStatusInProjects(toolkit: Toolkit, props: { toStatus: s
     }
 }
 
-export async function syncPriorities(toolkit: Toolkit) {
-    const FRAMEWORK_GROUP_PROJECT_NUMBER = 27;
-
+export async function syncPriorities(toolkit: Toolkit, excludeList: number[]) {
     const issue = toolkit.context.payload.issue!;
     toolkit.core.debug(`Issue node ID: ${issue.node_id}`);
-
-    const issueWithProjectItems = await findIssueWithProjectItems(toolkit, issue.number);
-    const projectCard = issueWithProjectItems.projectItems.find(projectItem => projectItem.project.number == FRAMEWORK_GROUP_PROJECT_NUMBER);
-    if (!projectCard) {
-        toolkit.core.info("Issue is not part of the Framework Group project");
-        return;
-    }
-
     const priorityLabel = issue.labels.find((label: Label) =>
         label.name.startsWith("priority/")
     )?.name;
@@ -421,29 +414,33 @@ export async function syncPriorities(toolkit: Toolkit) {
     const priority = priorityLabel.split('/')[1];
     toolkit.core.info(`Priority: ${priority}`);
 
-    const projectInfo = await getProjectInfo(toolkit, { number: FRAMEWORK_GROUP_PROJECT_NUMBER });
-    const priorityField = projectInfo.fields.find(field => field.name == "Priority");
-    const priorityOption = priorityField?.options.find(option => option.name == priority);
+    const issueWithProjectItems = await findIssueWithProjectItems(toolkit, issue.number);
+    for (const projectItem of issueWithProjectItems.projectItems) {
+        if (excludeList.includes(projectItem.project.number)) {
+            toolkit.core.info(`The project number ${projectItem.project.number} is on the excludeList. skipping...`);
+            continue;
+        }
+        const projectInfo = await getProjectInfo(toolkit, { number: projectItem.project.number });
+        const priorityField = projectInfo.fields.find(field => field.name == "Priority");
+        if (!priorityField) {
+            toolkit.core.info(`${projectInfo.title} doesn't have a priority field. skipping...`);
+            continue;
+        }
+        const priorityOption = priorityField?.options.find(option => option.name == priority);
+        if (!priorityOption) {
+            toolkit.core.info(`${projectInfo.title} doesn't have the priority option ${priority}. skipping...`);
+            continue;
+        }
 
-    if (!priorityOption) {
-        throw new Error(`Unknown priority "${priority}`);
+        toolkit.core.info(`Setting priority for issue ${issue.number} on ${projectInfo.title} to ${priority}`);
+
+        await setFieldValue(toolkit, {
+            projectId: projectInfo.node_id,
+            itemId: projectItem.id,
+            fieldId: priorityField!.id,
+            valueId: priorityOption.id
+        });
     }
-
-    const cardId = projectCard.id;
-
-    if (!cardId) {
-        toolkit.core.warning(`Couldn't find issue ${issue.number} in project with number ${FRAMEWORK_GROUP_PROJECT_NUMBER}`);
-        return;
-    }
-
-    toolkit.core.info(`Setting priority for issue ${issue.number}`);
-
-    await setFieldValue(toolkit, {
-        projectId: projectInfo.node_id,
-        itemId: cardId,
-        fieldId: priorityField!.id,
-        valueId: priorityOption.id
-    });
 }
 
 export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, dryRun: boolean) {

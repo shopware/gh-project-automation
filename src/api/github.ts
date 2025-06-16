@@ -49,7 +49,7 @@ export async function addLabelToLabelable(toolkit: Toolkit, labelId: string, lab
     const res = await toolkit.github.graphql<{
         clientMutationId: string
     }>(/* GraphQL */ `
-        mutation($labelId: ID!, $labelableId: ID!) {
+        mutation addLabels($labelId: ID!, $labelableId: ID!) {
             addLabelsToLabelable(input: {
                 labelIds: [$labelId],
                 labelableId: $labelableId

@@ -8,6 +8,8 @@ export default tseslint.config(
     eslint.configs.recommended,
     tseslint.configs.recommended,
     {
+        // See: https://the-guild.dev/graphql/eslint/docs/usage/js#eslint-flat-config
+
         files: ['**/*.ts'],
         processor: graphqlPlugin.processor,
         rules: {
@@ -16,6 +18,8 @@ export default tseslint.config(
         },
     },
     {
+        // See: https://the-guild.dev/graphql/eslint/docs/usage/js#eslint-flat-config
+
         files: ['**/*.graphql'],
         languageOptions: {
             parser: graphqlPlugin.parser,
@@ -29,7 +33,7 @@ export default tseslint.config(
                 'error',
                 {
                     OperationDefinition: {
-                        style: 'PascalCase',
+                        style: 'camelCase',
                         forbiddenPrefixes: ['Query', 'Mutation', 'Subscription', 'Get'],
                         forbiddenSuffixes: ['Query', 'Mutation', 'Subscription'],
                     },

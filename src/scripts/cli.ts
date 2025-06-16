@@ -60,11 +60,13 @@ export async function run(method: string, ...args: string[]) {
             result = await automation.getDevelopmentIssueForPullRequest(toolkit, args[0], parseInt(args[1]), args[2], args[3]);
             break;
         default:
+            // eslint-disable-next-line no-console
             console.warn("Unknown method");
             break;
     }
 
     if (result !== undefined) {
+        // eslint-disable-next-line no-console
         console.debug(result);
     }
 }

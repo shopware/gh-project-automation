@@ -166,8 +166,7 @@ export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, d
 
     switch (Number(projectNumber)) {
         case 27: {
-            const query = `
-                #graphql
+            const query = /* GraphQL */ `
                 query {
                     search(
                       type: ISSUE
@@ -303,8 +302,7 @@ export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
     now.setDate(now.getDate() - DAYS_UNTIL_CLOSE);
     const closeDate = now.toISOString().split('T')[0];
 
-    const query = `
-        #graphql
+    const query = /* GraphQL */ `
         query {
             search(
               type: ISSUE

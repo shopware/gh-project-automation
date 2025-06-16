@@ -131,8 +131,7 @@ async function manageNeedsTriageLabel(toolkit: Toolkit, labelable: Labelable, ne
         if (dryRun) {
             toolkit.core.info(`Would remove needs-triage label from #${labelable.number}: ${labelable.title} (has domain/service label)`);
         } else {
-            await toolkit.github.graphql(`
-                #graphql
+            await toolkit.github.graphql(/* GraphQL */ `
                 mutation removeLabel($labelableId: ID!, $labelIds: [ID!]!) {
                     removeLabelsFromLabelable(input: {
                         labelableId: $labelableId,
@@ -184,8 +183,7 @@ export async function cleanupNeedsTriage(toolkit: Toolkit, dryRun: boolean = fal
     let cursorIssues: string | null = null;
 
     while (hasNextPageIssues) {
-        const res: QueryResponse = await toolkit.github.graphql<QueryResponse>(`
-            #graphql
+        const res: QueryResponse = await toolkit.github.graphql<QueryResponse>(/* GraphQL */ `
             query getOpenIssues($cursor: String) {
                 repository(owner: "shopware", name: "shopware") {
                     issues(first: 100, after: $cursor, states: OPEN) {
@@ -227,8 +225,7 @@ export async function cleanupNeedsTriage(toolkit: Toolkit, dryRun: boolean = fal
     let cursorPRs: string | null = null;
 
     while (hasNextPagePRs) {
-        const res: QueryResponse = await toolkit.github.graphql<QueryResponse>(`
-            #graphql
+        const res: QueryResponse = await toolkit.github.graphql<QueryResponse>(/* GraphQL */ `
             query getOpenPRs($cursor: String) {
                 repository(owner: "shopware", name: "shopware") {
                     pullRequests(first: 100, after: $cursor, states: OPEN) {

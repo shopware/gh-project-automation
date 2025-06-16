@@ -1,8 +1,7 @@
 import {GitHubComment, GitHubIssue, Label, Toolkit} from "../types";
 
 export async function closeIssue(toolkit: Toolkit, issueId: string) {
-    const res = await toolkit.github.graphql(`
-        #graphql
+    const res = await toolkit.github.graphql(/* GraphQL */ `
         mutation closeIssue($issueId: ID!) {
             closeIssue(input: {
                 issueId: $issueId,
@@ -25,8 +24,7 @@ export async function getLabelByName(toolkit: Toolkit, repository: string, label
         repository: {
             label?: Label
         }
-    }>(`
-        #graphql
+    }>(/* GraphQL */ `
         query getLabelId($repository: String!, $labelName: String!) {
             repository(owner: "shopware", name: $repository) {
                 label(name: $labelName) {
@@ -50,8 +48,7 @@ export async function getLabelByName(toolkit: Toolkit, repository: string, label
 export async function addLabelToLabelable(toolkit: Toolkit, labelId: string, labelableId: string) {
     const res = await toolkit.github.graphql<{
         clientMutationId: string
-    }>(`
-        #graphql
+    }>(/* GraphQL */ `
         mutation($labelId: ID!, $labelableId: ID!) {
             addLabelsToLabelable(input: {
                 labelIds: [$labelId],
@@ -85,8 +82,7 @@ export async function findIssueWithProjectItems(toolkit: Toolkit, number: number
                 number: number,
             }
         }
-    }>(`
-        #graphql
+    }>(/* GraphQL */ `
         query findIssueWithProjectItems($number: Int!) {
             repository(owner: "shopware", name: "shopware") {
                 issue(number: $number) {
@@ -137,8 +133,7 @@ export async function findPRWithProjectItems(toolkit: Toolkit, number: number) {
                 number: number,
             }
         }
-    }>(`
-        #graphql
+    }>(/* GraphQL */ `
         query findPRWithProjectItems($number: Int!) {
             repository(owner: "shopware", name: "shopware") {
                 pullRequest(number: $number) {
@@ -180,8 +175,7 @@ export async function setFieldValue(toolkit: Toolkit, data: {
     fieldId: string,
     valueId: string
 }) {
-    const res = await toolkit.github.graphql(`
-        #graphql
+    const res = await toolkit.github.graphql(/* GraphQL */ `
         mutation setFieldValue($projectId: ID!, $itemId: ID!, $fieldId: ID!, $valueId: String!) {
             updateProjectV2ItemFieldValue(input: {
                 projectId: $projectId,
@@ -224,8 +218,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: {
             }
         }
     };
-    const res = await toolkit.github.graphql<getProjectInfo>(`
-        #graphql
+    const res = await toolkit.github.graphql<getProjectInfo>(/* GraphQL */ `
         query getProjectInfo($organization: String!, $projectNumber: Int!) {
             organization(login: $organization) {
                 projectV2(number: $projectNumber) {
@@ -268,8 +261,7 @@ export async function addProjectItem(toolkit: Toolkit, data: {
 }) {
     const res = await toolkit.github.graphql<{
         addProjectV2ItemById: { item: { id: string } }
-    }>(`
-        #graphql
+    }>(/* GraphQL */ `
         mutation addProjectItem($projectId: ID!, $contentId: ID!) {
             addProjectV2ItemById(input: {
                 projectId: $projectId,
@@ -308,8 +300,7 @@ export async function getProjectIdByNumber(toolkit: Toolkit, number: number, org
                 id: string
             }
         }
-    }>(`
-        #graphql
+    }>(/* GraphQL */ `
         query getProjectIdByNumber($organization: String!, $number: Int!) {
             organization(login: $organization) {
                 projectV2(number: $number) {
@@ -364,8 +355,7 @@ export async function getIssuesByProject(toolkit: Toolkit, projectId: string, cu
                 }]
             }
         }
-    }>(`
-        #graphql
+    }>(/* GraphQL */ `
         query getIssuesByProject($projectId: ID!, $count: Int, $cursor: String) {
             node(id: $projectId) {
                 ... on ProjectV2 {
@@ -449,8 +439,7 @@ export async function getCommentsForIssue(toolkit: Toolkit, issueId: string, cur
                 nodes: GitHubComment[]
             }
         }
-    }>(`
-        #graphql
+    }>(/* GraphQL */ `
         query getCommentsForIssue($issueId: ID!, $count: Int, $cursor: String) {
             node(id: $issueId) {
                 ... on Issue {
@@ -547,8 +536,7 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string) {
                 ]
             }
         }
-    >(`
-        #graphql
+    >(/* GraphQL */ `
         query findPullRequests($searchQuery: String!) {
             search(query: $searchQuery, type: ISSUE, first: 50) {
                 pageInfo {
@@ -618,8 +606,7 @@ export async function addComment(toolkit: Toolkit, issueId: string, commentBody:
                 node: GitHubComment
             }
         }
-    }>(`
-        #graphql
+    }>(/* GraphQL */ `
         mutation addComment($issueId: ID!, $body: String!) {
             addComment(input: {
                 subjectId: $issueId,

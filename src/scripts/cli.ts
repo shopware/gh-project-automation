@@ -1,4 +1,3 @@
-import * as automation from "../index";
 import {getOctokit} from "@actions/github";
 import {Context} from "@actions/github/lib/context";
 import * as core from "@actions/core";
@@ -6,7 +5,6 @@ import * as exec from "@actions/exec";
 import * as glob from "@actions/glob";
 import * as io from "@actions/io";
 import fetch from "node-fetch";
-import {createDocumentationTasksForProjects} from "../index";
 
 const toolkit = {
     github: getOctokit(process.env.GITHUB_TOKEN ?? ""),
@@ -17,6 +15,8 @@ const toolkit = {
     io: io,
     fetch: fetch,
 }
+
+import * as automation from "../index";
 
 /**
  * Run the automation functions from the command line.
@@ -51,7 +51,7 @@ export async function run(method: string, ...args: string[]) {
             result = await automation.createDocIssueComment(toolkit, args[0], args[1]);
             break;
         case "createDocumentationTasksForProjects":
-            result = await createDocumentationTasksForProjects(toolkit, args[0].split(",").map(i => parseInt(i)));
+            result = await automation.createDocumentationTasksForProjects(toolkit, args[0].split(",").map(i => parseInt(i)));
             break;
         case "cleanupNeedsTriage":
             result = await automation.cleanupNeedsTriage(toolkit, true);
@@ -60,11 +60,13 @@ export async function run(method: string, ...args: string[]) {
             result = await automation.getDevelopmentIssueForPullRequest(toolkit, args[0], parseInt(args[1]), args[2], args[3]);
             break;
         default:
+            // eslint-disable-next-line no-console
             console.warn("Unknown method");
             break;
     }
 
     if (result !== undefined) {
+        // eslint-disable-next-line no-console
         console.debug(result);
     }
 }

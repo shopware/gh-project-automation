@@ -205,6 +205,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: {
         organization: {
             projectV2: {
                 id: string,
+                title: string,
                 fields: {
                     nodes: [{
                         id: string,
@@ -223,6 +224,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: {
             organization(login: $organization) {
                 projectV2(number: $projectNumber) {
                     id
+                    title
                     fields(first: 20) {
                         nodes {
                             ... on ProjectV2SingleSelectField {
@@ -251,6 +253,7 @@ export async function getProjectInfo(toolkit: Toolkit, data: {
 
     return {
         node_id: project.id,
+        title: project.title,
         fields: project.fields.nodes,
     }
 }

@@ -1,0 +1,21 @@
+name: get_label_by_name
+description: Action for getLabelByName
+inputs:
+  repository:
+    description: Input for repository
+  label_name:
+    description: Input for labelName
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run getLabelByName
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      REPOSITORY: ${{ inputs.repository }}
+      LABEL_NAME: ${{ inputs.label_name }}
+    with:
+      script: |-
+        const { getLabelByName } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await getLabelByName({github, core, context, fetch}, process.env.REPOSITORY, process.env.LABEL_NAME);

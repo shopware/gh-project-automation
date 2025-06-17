@@ -1,0 +1,24 @@
+name: create_documentation_task
+description: Action for createDocumentationTask
+inputs:
+  issue:
+    description: Input for issue
+  documentation_project_id:
+    description: Input for documentationProjectId
+  description:
+    description: Input for description
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run createDocumentationTask
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      ISSUE: ${{ inputs.issue }}
+      DOCUMENTATION_PROJECT_ID: ${{ inputs.documentation_project_id }}
+      DESCRIPTION: ${{ inputs.description }}
+    with:
+      script: |-
+        const { createDocumentationTask } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await createDocumentationTask({github, core, context, fetch}, process.env.ISSUE, process.env.DOCUMENTATION_PROJECT_ID, process.env.DESCRIPTION);

@@ -1,0 +1,24 @@
+name: get_issues_by_project
+description: Action for getIssuesByProject
+inputs:
+  project_id:
+    description: Input for projectId
+  cursor:
+    description: Input for cursor
+  carry:
+    description: Input for carry
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run getIssuesByProject
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      PROJECT_ID: ${{ inputs.project_id }}
+      CURSOR: ${{ inputs.cursor }}
+      CARRY: ${{ inputs.carry }}
+    with:
+      script: |-
+        const { getIssuesByProject } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await getIssuesByProject({github, core, context, fetch}, process.env.PROJECT_ID, process.env.CURSOR, process.env.CARRY);

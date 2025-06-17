@@ -1,0 +1,27 @@
+name: get_development_issue_for_pull_request
+description: Action for getDevelopmentIssueForPullRequest
+inputs:
+  repo:
+    description: Input for repo
+  pull_request_number:
+    description: Input for pullRequestNumber
+  pull_request_head:
+    description: Input for pullRequestHead
+  pull_request_assignee:
+    description: Input for pullRequestAssignee
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run getDevelopmentIssueForPullRequest
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      REPO: ${{ inputs.repo }}
+      PULL_REQUEST_NUMBER: ${{ inputs.pull_request_number }}
+      PULL_REQUEST_HEAD: ${{ inputs.pull_request_head }}
+      PULL_REQUEST_ASSIGNEE: ${{ inputs.pull_request_assignee }}
+    with:
+      script: |-
+        const { getDevelopmentIssueForPullRequest } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await getDevelopmentIssueForPullRequest({github, core, context, fetch}, process.env.REPO, process.env.PULL_REQUEST_NUMBER, process.env.PULL_REQUEST_HEAD, process.env.PULL_REQUEST_ASSIGNEE);

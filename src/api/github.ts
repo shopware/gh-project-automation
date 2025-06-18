@@ -639,3 +639,29 @@ export async function addComment(toolkit: Toolkit, issueId: string, commentBody:
 
     return comment;
 }
+
+/**
+ * getVerifiedDomainEmails fetches the verified domain emails for a user account associated with an enterprise.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param login - The login of the user.
+ */
+export async function getVerifiedDomainEmails(toolkit: Toolkit, login: string) {
+    const res = await toolkit.github.graphql<{
+        user: {
+            organizationVerifiedDomainEmails: string[]
+        }
+    }>(/* GraphQL */ `
+        query getVerifiedDomainEmails($login: String!, $enterprise: String!) {
+            user(login: $login) {
+                organizationVerifiedDomainEmails(login: $enterprise)
+            }
+        }
+    `,
+        {
+            login,
+            enterprise: "shopware"
+        });
+
+    return res.user.organizationVerifiedDomainEmails;
+}

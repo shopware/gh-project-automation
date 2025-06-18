@@ -292,7 +292,9 @@ export async function pingAssigneesOfOldPullRequests(toolkit: Toolkit, days: num
             continue;
         }
 
-        await sendSlackMessageForGithubUser(toolkit, assignee.login, `Hey <@${assignee.login}>, the pull request #${pr.number} (${pr.title}) has not been updated for more than ${days} days. Please check it out!`);
+        const message = `Hi @${assignee.login}, this pull request (#${pr.number}: "${pr.title}") has not been updated in over ${days} days. Please take a look and update it if needed: ${pr.url}`
+
+        await sendSlackMessageForGithubUser(toolkit, assignee.login, message);
     }
 
     toolkit.core.info(`Finished pinging assignees of old pull requests.`);

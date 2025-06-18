@@ -1,11 +1,22 @@
 import {readFileSync} from "fs";
 import {parse} from "@typescript-eslint/parser";
+import * as types from "@typescript-eslint/types";
 import yaml from 'js-yaml';
 import * as fs from 'fs';
 
 const functionDenyList: string[] = [
     // NOOP
 ];
+
+type FunctionParamDeclaration = {
+    type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'any';
+    name: string;
+}
+
+type FunctionDeclaration = {
+    name: string;
+    params: FunctionParamDeclaration[];
+}
 
 type Manifest = {
     name: string;
@@ -17,15 +28,37 @@ function toSnakeCase(str: string): string {
     return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 }
 
-export function getExportedFunctions(filename: string): Record<string, string[]> {
+function toArgument(param: { type: string; name: string }): string {
+    const arg = `process.env.${toSnakeCase(param.name).toUpperCase()}`;
+
+    if (['object', 'array'].includes(param.type)) {
+        return `JSON.parse(${arg})`;
+    }
+
+    if (param.type === 'boolean') {
+        return `${arg} === 'true'`;
+    }
+
+    return arg;
+}
+
+function toScript(func: FunctionDeclaration): string {
+    const funcImport: string = `const { ${func.name} } = await import('\${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');`
+    const funcCall: string = func.params.length < 1 ? `await ${func.name}({github, core, context, fetch});` : `await ${func.name}({github, core, context, fetch}, ${func.params.map(toArgument).join(', ')});`;
+
+    return [funcImport, funcCall].join('\n');
+}
+
+export function getExportedFunctions(filename: string): FunctionDeclaration[] {
     const code = readFileSync(filename, 'utf8');
     const parsed = parse(code, { loc: true });
 
-    const functions: Record<string, string[]> = {};
+    const functions: FunctionDeclaration[] = [];
 
     parsed.body.forEach(node => {
         if (node.type === 'ExportNamedDeclaration' && node.declaration?.type === 'FunctionDeclaration') {
             const name = node?.declaration?.id?.name;
+            const params = node?.declaration?.params;
 
             if (!name) {
                 return;
@@ -35,22 +68,38 @@ export function getExportedFunctions(filename: string): Record<string, string[]>
                 return;
             }
 
-            functions[name] = node.declaration.params.map(param => param.type === 'AssignmentPattern' ? param.left.name : param.name).filter(name => name !== 'toolkit');
+            if (!params || params.length === 0) {
+                functions.push({
+                    name,
+                    params: []
+                });
+
+                return;
+            }
+
+            functions.push({
+                name,
+                params: params.flatMap(param => extractParam(param)).filter(param => param.name !== 'toolkit')
+            });
         }
     });
 
     return functions;
 }
 
-export function getActionManifests(declarations: Record<string, string[]>): Manifest[] {
+function extractParam(param: types.TSESTree.Parameter): FunctionParamDeclaration[] {
+    // TODO: Implement
+}
+
+export function getActionManifests(declarations: FunctionDeclaration[]): Manifest[] {
     const manifests = [];
 
-    for (const [name, params] of Object.entries(declarations)) {
+    for (const {name, params} of declarations) {
         manifests.push({
             name: toSnakeCase(name),
             description: `Action for ${name}`,
-            inputs: params.reduce((acc: Record<string, object>, param: string) => {
-                acc[toSnakeCase(param)] = {description: `Input for ${param}`};
+            inputs: params.reduce((acc: Record<string, object>, param) => {
+                acc[toSnakeCase(param.name)] = {description: `Input for ${param.name}`};
                 return acc;
             }, {}),
             runs: {
@@ -63,12 +112,12 @@ export function getActionManifests(declarations: Record<string, string[]>): Mani
                     {
                         name: `Run ${name}`,
                         uses: 'actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1', // v7
-                        env: params.reduce((acc: Record<string, string>, param: string) => {
-                            acc[toSnakeCase(param).toUpperCase()] = `\${{ inputs.${toSnakeCase(param)} }}`;
+                        env: params.reduce((acc: Record<string, string>, param) => {
+                            acc[toSnakeCase(param.name).toUpperCase()] = `\${{ inputs.${toSnakeCase(param.name)} }}`;
                             return acc;
                         }, {}),
                         with: {
-                            script: `const { ${name} } = await import('\${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');\nawait ${name}({github, core, context, fetch}, ${params.map(param => 'process.env.' + toSnakeCase(param).toUpperCase()).join(', ')});`
+                            script: toScript({name, params}),
                         }
                     }
                 ]

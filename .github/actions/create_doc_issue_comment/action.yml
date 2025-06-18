@@ -1,0 +1,24 @@
+name: create_doc_issue_comment
+description: Action for createDocIssueComment
+inputs:
+  issue_id:
+    description: Input for issueId
+  doc_issue_key:
+    description: Input for docIssueKey
+  content:
+    description: Input for content
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run createDocIssueComment
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      ISSUE_ID: ${{ inputs.issue_id }}
+      DOC_ISSUE_KEY: ${{ inputs.doc_issue_key }}
+      CONTENT: ${{ inputs.content }}
+    with:
+      script: |-
+        const { createDocIssueComment } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await createDocIssueComment({github, core, context, fetch}, process.env.ISSUE_ID, process.env.DOC_ISSUE_KEY, process.env.CONTENT);

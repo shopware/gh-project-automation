@@ -1,0 +1,30 @@
+name: create_documentation_tasks_for_projects
+description: Action for createDocumentationTasksForProjects
+inputs:
+  project_numbers:
+    description: Input for projectNumbers
+  organization:
+    description: Input for organization
+  documentation_project_id:
+    description: Input for documentationProjectId
+  description:
+    description: Input for description
+  comment:
+    description: Input for comment
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run createDocumentationTasksForProjects
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      PROJECT_NUMBERS: ${{ inputs.project_numbers }}
+      ORGANIZATION: ${{ inputs.organization }}
+      DOCUMENTATION_PROJECT_ID: ${{ inputs.documentation_project_id }}
+      DESCRIPTION: ${{ inputs.description }}
+      COMMENT: ${{ inputs.comment }}
+    with:
+      script: |-
+        const { createDocumentationTasksForProjects } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await createDocumentationTasksForProjects({github, core, context, fetch}, process.env.PROJECT_NUMBERS, process.env.ORGANIZATION, process.env.DOCUMENTATION_PROJECT_ID, process.env.DESCRIPTION, process.env.COMMENT);

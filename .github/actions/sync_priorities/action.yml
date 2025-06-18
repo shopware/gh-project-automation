@@ -1,0 +1,18 @@
+name: sync_priorities
+description: Action for syncPriorities
+inputs:
+  exclude_list:
+    description: Input for excludeList
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run syncPriorities
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      EXCLUDE_LIST: ${{ inputs.exclude_list }}
+    with:
+      script: |-
+        const { syncPriorities } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await syncPriorities({github, core, context, fetch}, process.env.EXCLUDE_LIST);

@@ -1,0 +1,18 @@
+name: find_p_r_with_project_items
+description: Action for findPRWithProjectItems
+inputs:
+  number:
+    description: Input for number
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run findPRWithProjectItems
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      NUMBER: ${{ inputs.number }}
+    with:
+      script: |-
+        const { findPRWithProjectItems } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await findPRWithProjectItems({github, core, context, fetch}, process.env.NUMBER);

@@ -281,7 +281,7 @@ export async function findWithProjectItems(toolkit: Toolkit) {
 export async function pingAssigneesOfOldPullRequests(toolkit: Toolkit, days: number = 7) {
     const pullRequests = await getPullRequests(
         toolkit,
-        `is:pr is:open updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
+        `org:shopware is:pr is:open updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
     );
 
     for (const pr of pullRequests) {
@@ -296,6 +296,4 @@ export async function pingAssigneesOfOldPullRequests(toolkit: Toolkit, days: num
 
         await sendSlackMessageForGithubUser(toolkit, assignee.login, message);
     }
-
-    toolkit.core.info(`Finished pinging assignees of old pull requests.`);
 }

@@ -9,7 +9,7 @@ import {
 
 import {
     addComment,
-    addLabelToLabelable,
+    addLabelToLabelable, closePullRequest,
     findIssueWithProjectItems,
     findPRWithProjectItems,
     getCommentsForIssue,
@@ -162,7 +162,7 @@ async function manageNeedsTriageLabel(toolkit: Toolkit, labelable: Labelable, ne
 /**
  * Cleans up needs-triage in issues and pull requests
  *
- * @param toolkit - The toolkit instance to interact with the project management system.
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  * @param dryRun - If true, only log what would be done without making changes.
  *
  * @remarks
@@ -278,7 +278,14 @@ export async function findWithProjectItems(toolkit: Toolkit) {
     }
 }
 
-export async function pingAssigneesOfOldPullRequests(toolkit: Toolkit, days: number = 7) {
+/**
+ * manageOldPullRequests checks for old pull requests and sends a reminder message to the assignee.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param days - Consider pull requests old after this many days of inactivity.
+ * @param close - If true, the pull request will be closed after sending the reminder.
+ */
+export async function manageOldPullRequests(toolkit: Toolkit, days: number = 7, close: boolean = false) {
     const pullRequests = await getPullRequests(
         toolkit,
         `org:shopware is:pr is:open updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
@@ -286,13 +293,21 @@ export async function pingAssigneesOfOldPullRequests(toolkit: Toolkit, days: num
 
     for (const pr of pullRequests) {
         const assignee = pr.assignees.nodes[0];
+        const baseMsg = `Hi @${assignee.login}, this pull request (${pr.repository.owner}/${pr.repository.name}#${pr.number}: "${pr.title}") has not been updated in over ${days} days. Please take a look and update it if needed: ${pr.url}`
+        const closeMsg = `The pull request has been closed automatically. If you would like to continue working on it, please feel free to re-open it!`;
+        const message = close ? `${baseMsg}\n\n${closeMsg}` : baseMsg;
 
         if (!assignee) {
-            toolkit.core.info(`Pull request #${pr.number} has no assignee, skipping.`);
+            toolkit.core.info(`Pull request ${pr.repository.owner}/${pr.repository.name}#${pr.number} has no assignee, skipping.`);
+
             continue;
         }
 
-        const message = `Hi @${assignee.login}, this pull request (#${pr.number}: "${pr.title}") has not been updated in over ${days} days. Please take a look and update it if needed: ${pr.url}`
+        if (close) {
+            toolkit.core.info(`Closing pull request ${pr.repository.owner}/${pr.repository.name}#${pr.number}.`);
+
+            await closePullRequest(toolkit, pr.id);
+        }
 
         await sendSlackMessageForGithubUser(toolkit, assignee.login, message);
     }

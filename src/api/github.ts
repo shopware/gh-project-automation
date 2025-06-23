@@ -1,22 +1,41 @@
 import {GitHubComment, GitHubIssue, Label, Toolkit} from "../types";
 
-export async function closeIssue(toolkit: Toolkit, issueId: string) {
+export async function closeIssue(toolkit: Toolkit, issueId: string, reason: string = "NOT_PLANNED") {
     const res = await toolkit.github.graphql(/* GraphQL */ `
-        mutation closeIssue($issueId: ID!) {
+        mutation closeIssue($issueId: ID!, $reason: IssueClosedStateReason!) {
             closeIssue(input: {
                 issueId: $issueId,
-                stateReason:NOT_PLANNED
+                stateReason: $reason,
             }) {
                 clientMutationId
             }
         }
     `,
         {
-            issueId: issueId
+            issueId: issueId,
+            reason: reason
         }
     );
 
     toolkit.core.debug(`closeIssue response: ${JSON.stringify(res)}`);
+}
+
+export async function closePullRequest(toolkit: Toolkit, pullRequestId: string) {
+    const res = await toolkit.github.graphql(/* GraphQL */ `
+        mutation closeIssue($pullRequestId: ID!) {
+            closePullRequest(input: {
+                pullRequestId: $pullRequestId
+            }) {
+                clientMutationId
+            }
+        }
+    `,
+        {
+            pullRequestId: pullRequestId
+        }
+    );
+
+    toolkit.core.debug(`closePullRequest response: ${JSON.stringify(res)}`);
 }
 
 export async function getLabelByName(toolkit: Toolkit, repository: string, labelName: string) {

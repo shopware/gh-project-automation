@@ -294,9 +294,6 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
 
     for (const pr of pullRequests) {
         const assignee = pr.assignees.nodes[0];
-        const baseMsg = `Hi @${assignee.login}, this pull request (${pr.repository.owner}/${pr.repository.name}#${pr.number}: "${pr.title}") has not been updated in over ${days} days. Please take a look and update it if needed: ${pr.url}`
-        const closeMsg = `The pull request has been closed automatically. If you would like to continue working on it, please feel free to re-open it!`;
-        const message = close ? `${baseMsg}\n\n${closeMsg}` : baseMsg;
 
         if (!assignee) {
             toolkit.core.info(`Pull request ${pr.repository.owner}/${pr.repository.name}#${pr.number} has no assignee, skipping.`);
@@ -304,8 +301,12 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
             continue;
         }
 
+        const baseMsg = `Hi @${assignee.login}, the pull request [${pr.repository.owner.login}/${pr.repository.name}#${pr.number}](${pr.url}) has not been updated in over ${days} days. Please take a look and update it if needed.`
+        const closeMsg = `The pull request has been closed automatically. If you would like to continue working on it, please feel free to re-open it!`;
+        const message = close ? `${baseMsg}\n${closeMsg}` : baseMsg;
+
         if (close) {
-            toolkit.core.info(`Closing pull request ${pr.repository.owner}/${pr.repository.name}#${pr.number}.`);
+            toolkit.core.info(`Closing pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number}.`);
 
             await closePullRequest(toolkit, pr.id);
         }

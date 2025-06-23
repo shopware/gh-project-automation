@@ -17,6 +17,12 @@ export class SlackClient {
         await this.webClient.chat.postMessage({
             channel: userId,
             text: message,
+            blocks: [
+                {
+                    type: 'markdown',
+                    text: message
+                }
+            ]
         });
     }
 }

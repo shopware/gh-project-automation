@@ -282,13 +282,14 @@ export async function findWithProjectItems(toolkit: Toolkit) {
  * manageOldPullRequests checks for old pull requests and sends a reminder message to the assignee.
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param organization - The GitHub organization to check for old pull requests.
  * @param days - Consider pull requests old after this many days of inactivity.
  * @param close - If true, the pull request will be closed after sending the reminder.
  */
-export async function manageOldPullRequests(toolkit: Toolkit, days: number = 7, close: boolean = false) {
+export async function manageOldPullRequests(toolkit: Toolkit, organization: string = "shopware", days: number = 7, close: boolean = false) {
     const pullRequests = await getPullRequests(
         toolkit,
-        `org:shopware is:pr is:open updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
+        `org:${organization} is:pr is:open updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
     );
 
     for (const pr of pullRequests) {
@@ -309,6 +310,6 @@ export async function manageOldPullRequests(toolkit: Toolkit, days: number = 7, 
             await closePullRequest(toolkit, pr.id);
         }
 
-        await sendSlackMessageForGithubUser(toolkit, assignee.login, message);
+        await sendSlackMessageForGithubUser(toolkit, assignee.login, organization, message);
     }
 }

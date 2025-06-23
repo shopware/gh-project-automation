@@ -664,22 +664,23 @@ export async function addComment(toolkit: Toolkit, issueId: string, commentBody:
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  * @param login - The login of the user.
+ * @param organization - The organization name whose verified domains to consider.
  */
-export async function getVerifiedDomainEmails(toolkit: Toolkit, login: string) {
+export async function getVerifiedDomainEmails(toolkit: Toolkit, login: string, organization: string) {
     const res = await toolkit.github.graphql<{
         user: {
             organizationVerifiedDomainEmails: string[]
         }
     }>(/* GraphQL */ `
-        query getVerifiedDomainEmails($login: String!, $enterprise: String!) {
+        query getVerifiedDomainEmails($login: String!, $organization: String!) {
             user(login: $login) {
-                organizationVerifiedDomainEmails(login: $enterprise)
+                organizationVerifiedDomainEmails(login: $organization)
             }
         }
     `,
         {
             login,
-            enterprise: "shopware"
+            organization
         });
 
     return res.user.organizationVerifiedDomainEmails;

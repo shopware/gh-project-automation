@@ -125,7 +125,7 @@ function extractIdentifierParam({ typeAnnotation, name }: types.TSESTree.Identif
 }
 
 function extractParam(param: types.TSESTree.Parameter): FunctionParamDeclaration[] {
-    const {argument, left, type, name} = param;
+    const {left, type, name} = param;
 
     if (param.type === Identifier) {
         return extractIdentifierParam(param);

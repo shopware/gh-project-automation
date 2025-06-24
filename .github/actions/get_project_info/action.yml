@@ -15,4 +15,4 @@ runs:
     with:
       script: |-
         const { getProjectInfo } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await getProjectInfo({github, core, context, fetch}, process.env.DATA);
+        await getProjectInfo({github, core, context, fetch}, JSON.parse(process.env.DATA));

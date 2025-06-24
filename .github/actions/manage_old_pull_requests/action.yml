@@ -1,0 +1,24 @@
+name: manage_old_pull_requests
+description: Action for manageOldPullRequests
+inputs:
+  organization:
+    description: Input for organization
+  days:
+    description: Input for days
+  close:
+    description: Input for close
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run manageOldPullRequests
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      ORGANIZATION: ${{ inputs.organization }}
+      DAYS: ${{ inputs.days }}
+      CLOSE: ${{ inputs.close }}
+    with:
+      script: |-
+        const { manageOldPullRequests } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await manageOldPullRequests({github, core, context, fetch}, process.env.ORGANIZATION, Number(process.env.DAYS), process.env.CLOSE === 'true');

@@ -27,4 +27,4 @@ runs:
     with:
       script: |-
         const { createDocumentationTasksForProjects } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await createDocumentationTasksForProjects({github, core, context, fetch}, process.env.PROJECT_NUMBERS, process.env.ORGANIZATION, process.env.DOCUMENTATION_PROJECT_ID, process.env.DESCRIPTION, process.env.COMMENT);
+        await createDocumentationTasksForProjects({github, core, context, fetch}, JSON.parse(process.env.PROJECT_NUMBERS), process.env.ORGANIZATION, process.env.DOCUMENTATION_PROJECT_ID, process.env.DESCRIPTION, process.env.COMMENT);

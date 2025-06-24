@@ -15,4 +15,4 @@ runs:
     with:
       script: |-
         const { findPRWithProjectItems } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await findPRWithProjectItems({github, core, context, fetch}, process.env.NUMBER);
+        await findPRWithProjectItems({github, core, context, fetch}, Number(process.env.NUMBER));

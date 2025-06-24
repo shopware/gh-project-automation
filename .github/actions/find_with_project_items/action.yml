@@ -12,4 +12,4 @@ runs:
     with:
       script: |-
         const { findWithProjectItems } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await findWithProjectItems({github, core, context, fetch}, );
+        await findWithProjectItems({github, core, context, fetch});

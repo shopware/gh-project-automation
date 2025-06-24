@@ -1,0 +1,24 @@
+name: send_slack_message_for_github_user
+description: Action for sendSlackMessageForGithubUser
+inputs:
+  login:
+    description: Input for login
+  organization:
+    description: Input for organization
+  message:
+    description: Input for message
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: npm i @shopware-ag/gh-project-automation
+  - name: Run sendSlackMessageForGithubUser
+    uses: actions/github-script@5c56fde4671bc2d3592fb0f2c5b5bab9ddae03b1
+    env:
+      LOGIN: ${{ inputs.login }}
+      ORGANIZATION: ${{ inputs.organization }}
+      MESSAGE: ${{ inputs.message }}
+    with:
+      script: |-
+        const { sendSlackMessageForGithubUser } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
+        await sendSlackMessageForGithubUser({github, core, context, fetch}, process.env.LOGIN, process.env.ORGANIZATION, process.env.MESSAGE);

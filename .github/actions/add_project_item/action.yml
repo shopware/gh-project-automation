@@ -15,4 +15,4 @@ runs:
     with:
       script: |-
         const { addProjectItem } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await addProjectItem({github, core, context, fetch}, process.env.DATA);
+        await addProjectItem({github, core, context, fetch}, JSON.parse(process.env.DATA));

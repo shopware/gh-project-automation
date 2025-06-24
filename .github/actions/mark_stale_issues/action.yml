@@ -18,4 +18,4 @@ runs:
     with:
       script: |-
         const { markStaleIssues } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await markStaleIssues({github, core, context, fetch}, process.env.PROJECT_NUMBER, process.env.DRY_RUN);
+        await markStaleIssues({github, core, context, fetch}, Number(process.env.PROJECT_NUMBER), process.env.DRY_RUN === 'true');

@@ -1,8 +1,19 @@
+import * as fs from "fs";
 import {readFileSync} from "fs";
 import {parse} from "@typescript-eslint/parser";
 import * as types from "@typescript-eslint/types";
 import yaml from 'js-yaml';
-import * as fs from 'fs';
+
+const {
+    TSStringKeyword,
+    TSNumberKeyword,
+    TSBooleanKeyword,
+    TSArrayType,
+    TSTypeLiteral,
+    TSTypeReference,
+    AssignmentPattern,
+    Identifier
+} = types.AST_NODE_TYPES;
 
 const functionDenyList: string[] = [
     // NOOP
@@ -37,6 +48,10 @@ function toArgument(param: { type: string; name: string }): string {
 
     if (param.type === 'boolean') {
         return `${arg} === 'true'`;
+    }
+
+    if (param.type === 'number') {
+        return `Number(${arg})`;
     }
 
     return arg;
@@ -87,8 +102,40 @@ export function getExportedFunctions(filename: string): FunctionDeclaration[] {
     return functions;
 }
 
+function extractIdentifierParam({ typeAnnotation, name }: types.TSESTree.Identifier): FunctionParamDeclaration[] {
+    let type: FunctionParamDeclaration['type'];
+
+    switch (typeAnnotation?.typeAnnotation?.type) {
+        case TSStringKeyword:
+            type = 'string'; break;
+        case TSNumberKeyword:
+            type = 'number'; break;
+        case TSBooleanKeyword:
+            type = 'boolean'; break;
+        case TSArrayType:
+            type = 'array'; break;
+        case TSTypeLiteral:
+        case TSTypeReference:
+            type = 'object'; break;
+        default:
+            type = 'any';
+    }
+
+    return [{ name, type }];
+}
+
 function extractParam(param: types.TSESTree.Parameter): FunctionParamDeclaration[] {
-    // TODO: Implement
+    const {argument, left, type, name} = param;
+
+    if (param.type === Identifier) {
+        return extractIdentifierParam(param);
+    }
+
+    if (type === AssignmentPattern && left.type === Identifier) {
+        return extractIdentifierParam(left);
+    }
+
+    return [{ name, type: 'any' }];
 }
 
 export function getActionManifests(declarations: FunctionDeclaration[]): Manifest[] {
@@ -128,7 +175,7 @@ export function getActionManifests(declarations: FunctionDeclaration[]): Manifes
     return manifests;
 }
 
-export function printActionManifests(manifests: object): string {
+export function printActionManifests(manifests: Manifest[]): string {
     return yaml.dump(manifests, {
         lineWidth: -1,
         noArrayIndent: true,

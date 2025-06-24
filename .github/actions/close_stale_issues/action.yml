@@ -15,4 +15,4 @@ runs:
     with:
       script: |-
         const { closeStaleIssues } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await closeStaleIssues({github, core, context, fetch}, process.env.DRY_RUN);
+        await closeStaleIssues({github, core, context, fetch}, process.env.DRY_RUN === 'true');

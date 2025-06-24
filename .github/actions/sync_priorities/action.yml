@@ -15,4 +15,4 @@ runs:
     with:
       script: |-
         const { syncPriorities } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await syncPriorities({github, core, context, fetch}, process.env.EXCLUDE_LIST);
+        await syncPriorities({github, core, context, fetch}, JSON.parse(process.env.EXCLUDE_LIST));

@@ -15,4 +15,4 @@ runs:
     with:
       script: |-
         const { referencesDocIssue } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await referencesDocIssue({github, core, context, fetch}, process.env.COMMENT);
+        await referencesDocIssue({github, core, context, fetch}, JSON.parse(process.env.COMMENT));

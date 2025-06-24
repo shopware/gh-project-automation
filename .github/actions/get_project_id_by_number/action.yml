@@ -18,4 +18,4 @@ runs:
     with:
       script: |-
         const { getProjectIdByNumber } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await getProjectIdByNumber({github, core, context, fetch}, process.env.NUMBER, process.env.ORGANIZATION);
+        await getProjectIdByNumber({github, core, context, fetch}, Number(process.env.NUMBER), process.env.ORGANIZATION);

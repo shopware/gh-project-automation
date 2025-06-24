@@ -24,4 +24,4 @@ runs:
     with:
       script: |-
         const { getDevelopmentIssueForPullRequest } = await import('${{ github.workspace }}/node_modules/@shopware-ag/gh-project-automation/dist/index.mjs');
-        await getDevelopmentIssueForPullRequest({github, core, context, fetch}, process.env.REPO, process.env.PULL_REQUEST_NUMBER, process.env.PULL_REQUEST_HEAD, process.env.PULL_REQUEST_ASSIGNEE);
+        await getDevelopmentIssueForPullRequest({github, core, context, fetch}, process.env.REPO, Number(process.env.PULL_REQUEST_NUMBER), process.env.PULL_REQUEST_HEAD, process.env.PULL_REQUEST_ASSIGNEE);

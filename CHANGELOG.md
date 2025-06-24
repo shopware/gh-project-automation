@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/shopware/gh-project-automation/compare/v1.6.2...v1.7.0) (2025-06-24)
+
+
+### Features
+
+* pull request reminders support ([#31](https://github.com/shopware/gh-project-automation/issues/31)) ([1b186e8](https://github.com/shopware/gh-project-automation/commit/1b186e86881de70ebed6d806aba60f60a260fdcf))
+
 ## [1.6.2](https://github.com/shopware/gh-project-automation/compare/v1.6.1...v1.6.2) (2025-06-04)
 
 

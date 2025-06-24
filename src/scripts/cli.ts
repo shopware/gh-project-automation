@@ -25,6 +25,12 @@ export async function run(method: string, ...args: string[]) {
             );
             result = "Action manifests written successfully.";
             break;
+        case "sendSlackMessageForGithubUser":
+            result = await automation.sendSlackMessageForGithubUser(toolkit, args[0], args[1], args[2]);
+            break;
+        case "manageOldPullRequests":
+            result = await automation.manageOldPullRequests(toolkit, args[0], parseInt(args[1]), args[2] === "true");
+            break;
         default:
             // eslint-disable-next-line no-console
             console.warn("Unknown method");

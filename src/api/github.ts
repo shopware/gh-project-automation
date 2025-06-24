@@ -1,22 +1,41 @@
 import {GitHubComment, GitHubIssue, Label, Toolkit} from "../types";
 
-export async function closeIssue(toolkit: Toolkit, issueId: string) {
+export async function closeIssue(toolkit: Toolkit, issueId: string, reason: string = "NOT_PLANNED") {
     const res = await toolkit.github.graphql(/* GraphQL */ `
-        mutation closeIssue($issueId: ID!) {
+        mutation closeIssue($issueId: ID!, $reason: IssueClosedStateReason!) {
             closeIssue(input: {
                 issueId: $issueId,
-                stateReason:NOT_PLANNED
+                stateReason: $reason,
             }) {
                 clientMutationId
             }
         }
     `,
         {
-            issueId: issueId
+            issueId: issueId,
+            reason: reason
         }
     );
 
     toolkit.core.debug(`closeIssue response: ${JSON.stringify(res)}`);
+}
+
+export async function closePullRequest(toolkit: Toolkit, pullRequestId: string) {
+    const res = await toolkit.github.graphql(/* GraphQL */ `
+        mutation closeIssue($pullRequestId: ID!) {
+            closePullRequest(input: {
+                pullRequestId: $pullRequestId
+            }) {
+                clientMutationId
+            }
+        }
+    `,
+        {
+            pullRequestId: pullRequestId
+        }
+    );
+
+    toolkit.core.debug(`closePullRequest response: ${JSON.stringify(res)}`);
 }
 
 export async function getLabelByName(toolkit: Toolkit, repository: string, labelName: string) {
@@ -638,4 +657,31 @@ export async function addComment(toolkit: Toolkit, issueId: string, commentBody:
     }
 
     return comment;
+}
+
+/**
+ * getVerifiedDomainEmails fetches the verified domain emails for a user account associated with an enterprise.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param login - The login of the user.
+ * @param organization - The organization name whose verified domains to consider.
+ */
+export async function getVerifiedDomainEmails(toolkit: Toolkit, login: string, organization: string) {
+    const res = await toolkit.github.graphql<{
+        user: {
+            organizationVerifiedDomainEmails: string[]
+        }
+    }>(/* GraphQL */ `
+        query getVerifiedDomainEmails($login: String!, $organization: String!) {
+            user(login: $login) {
+                organizationVerifiedDomainEmails(login: $organization)
+            }
+        }
+    `,
+        {
+            login,
+            organization
+        });
+
+    return res.user.organizationVerifiedDomainEmails;
 }

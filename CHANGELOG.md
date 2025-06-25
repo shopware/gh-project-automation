@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/shopware/gh-project-automation/compare/v1.7.0...v1.7.1) (2025-06-25)
+
+
+### Bug Fixes
+
+* add dry-run mode ([#34](https://github.com/shopware/gh-project-automation/issues/34)) ([6c516e1](https://github.com/shopware/gh-project-automation/commit/6c516e1fe5f4b8fc09b6b26998d0202bfdc0f812))
+
 ## [1.7.0](https://github.com/shopware/gh-project-automation/compare/v1.6.2...v1.7.0) (2025-06-24)
 
 

@@ -15,8 +15,15 @@ const {
     Identifier
 } = types.AST_NODE_TYPES;
 
-const functionDenyList: string[] = [
-    // NOOP
+const functionAllowList: string[] = [
+    'cleanupNeedsTriage',
+    'setStatusInProjects',
+    'markStaleIssues',
+    'closeStaleIssues',
+    'syncPriorities',
+    'getDevelopmentIssueForPullRequest',
+    'createDocumentationTasksForProjects',
+    'manageOldPullRequests',
 ];
 
 type FunctionParamDeclaration = {
@@ -79,7 +86,7 @@ export function getExportedFunctions(filename: string): FunctionDeclaration[] {
                 return;
             }
 
-            if (functionDenyList.includes(name)) {
+            if (!functionAllowList.includes(name)) {
                 return;
             }
 

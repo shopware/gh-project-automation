@@ -20,6 +20,7 @@ import {
 } from "../api";
 
 import {sendSlackMessageForGithubUser} from "./slack";
+import {isDryRun} from "../util/dry_run";
 
 export const docIssueReference = Buffer.from("doc-issue-created").toString("base64");
 
@@ -296,7 +297,7 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
         const assignee = pr.assignees.nodes[0];
 
         if (!assignee) {
-            toolkit.core.info(`Pull request ${pr.repository.owner}/${pr.repository.name}#${pr.number} has no assignee, skipping.`);
+            toolkit.core.info(`Pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number} has no assignee, skipping.`);
 
             continue;
         }
@@ -306,11 +307,17 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
         const message = close ? `${baseMsg}\n${closeMsg}` : baseMsg;
 
         if (close) {
-            toolkit.core.info(`Closing pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number}.`);
-
-            await closePullRequest(toolkit, pr.id);
+            if (isDryRun()) {
+                toolkit.core.info(`Dry run mode is enabled. Would close pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number}.`);
+            } else {
+                await closePullRequest(toolkit, pr.id);
+            }
         }
 
-        await sendSlackMessageForGithubUser(toolkit, assignee.login, organization, message);
+        if (isDryRun()) {
+            toolkit.core.info(`Dry run mode is enabled. Would send message to @${assignee.login} for pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number}.`);
+        } else {
+            await sendSlackMessageForGithubUser(toolkit, assignee.login, organization, message);
+        }
     }
 }

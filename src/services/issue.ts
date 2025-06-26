@@ -15,11 +15,11 @@ import {
     getCommentsForIssue,
     getIssuesByProject,
     getLabelByName,
-    getPullRequests,
+    getPullRequests, getVerifiedDomainEmails,
     jiraHost
 } from "../api";
 
-import {sendSlackMessageForGithubUser} from "./slack";
+import {sendSlackMessageForEMail} from "./slack";
 import {isDryRun} from "../util/dry_run";
 
 export const docIssueReference = Buffer.from("doc-issue-created").toString("base64");
@@ -297,9 +297,15 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
         const assignee = pr.assignees.nodes[0];
 
         if (!assignee) {
-            toolkit.core.info(`Pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number} has no assignee, skipping.`);
+            toolkit.core.debug(`Pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number} has no assignee, skipping.`);
 
             continue;
+        }
+
+        const emails = await getVerifiedDomainEmails(toolkit, assignee.login, organization);
+
+        if (emails.length < 1) {
+            continue; // No verified domain emails found for the assignee, abort.
         }
 
         const baseMsg = `Hi @${assignee.login}, the pull request [${pr.repository.owner.login}/${pr.repository.name}#${pr.number}](${pr.url}) has not been updated in over ${days} days. Please take a look and update it if needed.`
@@ -308,16 +314,16 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
 
         if (close) {
             if (isDryRun()) {
-                toolkit.core.info(`Dry run mode is enabled. Would close pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number}.`);
+                toolkit.core.info(`[DRY_RUN]\tWould close pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number}.`);
             } else {
                 await closePullRequest(toolkit, pr.id);
             }
         }
 
         if (isDryRun()) {
-            toolkit.core.info(`Dry run mode is enabled. Would send message to @${assignee.login} for pull request ${pr.repository.owner.login}/${pr.repository.name}#${pr.number}.`);
+            toolkit.core.info(`[DRY_RUN]\tWould send message to @${assignee.login}.`);
         } else {
-            await sendSlackMessageForGithubUser(toolkit, assignee.login, organization, message);
+            await sendSlackMessageForEMail(toolkit, emails, message);
         }
     }
 }

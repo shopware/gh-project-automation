@@ -1,4 +1,5 @@
 export * from './issue'
 export * from './jira'
 export * from './project'
+export * from './pull_request'
 export * from './slack'

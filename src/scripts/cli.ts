@@ -59,9 +59,6 @@ export async function run(method: string, ...args: string[]) {
         case "getDevelopmentIssueForPullRequest":
             result = await automation.getDevelopmentIssueForPullRequest(toolkit, args[0], parseInt(args[1]), args[2], args[3]);
             break;
-        case "sendSlackMessageForGithubUser":
-            result = await automation.sendSlackMessageForGithubUser(toolkit, args[0], args[1], args[2]);
-            break;
         case "manageOldPullRequests":
             result = await automation.manageOldPullRequests(toolkit, args[0], parseInt(args[1]), args[2] === "true");
             break;

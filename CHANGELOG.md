@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.2](https://github.com/shopware/gh-project-automation/compare/v1.7.1...v1.7.2) (2025-07-01)
+
+
+### Bug Fixes
+
+* abort processing stale PR, when no verified domain email was found for the assignee ([#36](https://github.com/shopware/gh-project-automation/issues/36)) ([0f834fc](https://github.com/shopware/gh-project-automation/commit/0f834fc99d764fcf9e3cf1f02a0a65944403c001))
+* skip messaging via Slack, comment upon closing instead ([#37](https://github.com/shopware/gh-project-automation/issues/37)) ([0f834fc](https://github.com/shopware/gh-project-automation/commit/0f834fc99d764fcf9e3cf1f02a0a65944403c001))
+
 ## [1.7.1](https://github.com/shopware/gh-project-automation/compare/v1.7.0...v1.7.1) (2025-06-25)
 
 

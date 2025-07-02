@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.8.0](https://github.com/shopware/gh-project-automation/compare/v1.7.2...v1.8.0) (2025-07-02)
+
+
+### Features
+
+* cleanup old branches ([#41](https://github.com/shopware/gh-project-automation/issues/41)) ([c7eadce](https://github.com/shopware/gh-project-automation/commit/c7eadce6d31095800c8c8070ea02f17dbc76aa77))
+
+
+### Bug Fixes
+
+* explicitly specify `draft:false` in order to exclude drafts from stale check ([#42](https://github.com/shopware/gh-project-automation/issues/42)) ([22a740b](https://github.com/shopware/gh-project-automation/commit/22a740b5ce8de5208c990c0123e337c0f205fb6c))
+* **syncPriorities:** set default for excludeList ([#39](https://github.com/shopware/gh-project-automation/issues/39)) ([3cdae1c](https://github.com/shopware/gh-project-automation/commit/3cdae1cdf6aeb32608d3d37e5f14d888f14b48b8))
+
 ## [1.7.2](https://github.com/shopware/gh-project-automation/compare/v1.7.1...v1.7.2) (2025-07-01)
 
 

@@ -1,5 +1,5 @@
-import {getOctokit} from "@actions/github";
-import {Context} from "@actions/github/lib/context";
+import { getOctokit } from "@actions/github";
+import { Context } from "@actions/github/lib/context";
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
 import * as glob from "@actions/glob";
@@ -61,6 +61,12 @@ export async function run(method: string, ...args: string[]) {
             break;
         case "manageOldPullRequests":
             result = await automation.manageOldPullRequests(toolkit, args[0], parseInt(args[1]), args[2] === "true");
+            break;
+        case "getOldBranches":
+            result = await automation.getOldBranches(toolkit, args[0], "", "shopware");
+            break;
+        case "cleanupOldBranches":
+            await automation.cleanupBranches(toolkit, args[0], "shopware");
             break;
         default:
             // eslint-disable-next-line no-console

@@ -1,4 +1,4 @@
-import {Label, Toolkit} from "../types";
+import { Label, Toolkit } from "../types";
 
 import {
     addLabelToLabelable,
@@ -17,7 +17,7 @@ import {
     hasDocIssueComment
 } from "./issue";
 
-import {createDocumentationTask} from "../index";
+import { createDocumentationTask } from "../index";
 
 /**
  * Sets the status of issues in projects using the provided toolkit.
@@ -45,7 +45,7 @@ export async function setStatusInProjects(toolkit: Toolkit, props: {
 
     for (const i in issue.projectItems) {
         const item = issue.projectItems[i];
-        const projectInfo = await getProjectInfo(toolkit, {number: item.project.number})
+        const projectInfo = await getProjectInfo(toolkit, { number: item.project.number })
         const statusField = projectInfo.fields.find(field => field.name == "Status");
         const toStatusOption = statusField?.options.find(x => x.name.toLowerCase() === props.toStatus.toLowerCase())
 
@@ -79,7 +79,7 @@ export async function setStatusInProjects(toolkit: Toolkit, props: {
     }
 }
 
-export async function syncPriorities(toolkit: Toolkit, excludeList: number[]) {
+export async function syncPriorities(toolkit: Toolkit, excludeList: number[] = []) {
     const issue = toolkit.context.payload.issue!;
     toolkit.core.debug(`Issue node ID: ${issue.node_id}`);
     const priorityLabel = issue.labels.find((label: Label) =>

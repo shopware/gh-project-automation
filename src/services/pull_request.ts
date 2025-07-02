@@ -18,7 +18,7 @@ import {isDryRun} from "../util/dry_run";
 export async function manageOldPullRequests(toolkit: Toolkit, organization: string = "shopware", days: number = 7, close: boolean = false) {
     const pullRequests = await getPullRequests(
         toolkit,
-        `org:${organization} is:pr is:open updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
+        `org:${organization} is:pr is:open draft:false updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
     );
     const closeMsg = `This pull request has been closed automatically. If you would like to continue working on it, please feel free to re-open it!`;
 

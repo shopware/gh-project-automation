@@ -1,4 +1,5 @@
-import {WebClient} from '@slack/web-api';
+import { WebClient } from '@slack/web-api';
+import { User } from '@slack/web-api/dist/types/response/UsersLookupByEmailResponse';
 
 export class SlackClient {
     private webClient: WebClient;
@@ -7,10 +8,10 @@ export class SlackClient {
         this.webClient = new WebClient(token);
     }
 
-    async getUserByEmail(email: string): Promise<string | null> {
-        const response = await this.webClient.users.lookupByEmail({email});
+    async getUserByEmail(email: string): Promise<User | null> {
+        const response = await this.webClient.users.lookupByEmail({ email });
 
-        return response.user?.id || null;
+        return response.user || null;
     }
 
     async sendIMToUser(userId: string, message: string): Promise<void> {

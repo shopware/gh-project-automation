@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/shopware/gh-project-automation/compare/v1.8.0...v1.9.0) (2025-07-09)
+
+
+### Features
+
+* return slack user instead of the id and get user by email ([#43](https://github.com/shopware/gh-project-automation/issues/43)) ([1b679b3](https://github.com/shopware/gh-project-automation/commit/1b679b396eb76e6cf4c4a11a9810a4c5c325f772))
+
 ## [1.8.0](https://github.com/shopware/gh-project-automation/compare/v1.7.2...v1.8.0) (2025-07-02)
 
 

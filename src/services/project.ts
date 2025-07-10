@@ -165,7 +165,7 @@ export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, d
                     search(
                       type: ISSUE
                       first: 100
-                      query: "repo:shopware/shopware is:issue state:open project:shopware/27 label:priority/low -label:AboutToClose -label:DoNotClose created:<=$staleDate"
+                      query: "repo:shopware/shopware is:issue state:open project:shopware/27 label:priority/low -label:lifecycle/AboutToClose -label:lifecycle/DoNotClose created:<=$staleDate"
                     ) {
                       pageInfo {
                         hasNextPage
@@ -271,10 +271,10 @@ export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, d
 
                 if (((priorityLabel && priorityLabel.split('/')[1] === "low") || statusInProject == "Backlog") && parentIssueType != "Epic") {
                     if (dryRun) {
-                        toolkit.core.info(`Would set "${issue.title}" (${issue.url}) to AboutToClose`);
+                        toolkit.core.info(`Would set "${issue.title}" (${issue.url}) to lifecycle/AboutToClose`);
                         continue;
                     }
-                    const aboutToCloseLabel = await getLabelByName(toolkit, "shopware", "AboutToClose");
+                    const aboutToCloseLabel = await getLabelByName(toolkit, "shopware", "lifecycle/AboutToClose");
                     if (!aboutToCloseLabel) {
                         throw Error("Couldn't find the AboutToClose label");
                     }
@@ -301,7 +301,7 @@ export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
             search(
               type: ISSUE
               first: 100
-              query: "repo:shopware/shopware is:issue state:open label:AboutToClose updated:<=$closeDate"
+              query: "repo:shopware/shopware is:issue state:open label:lifecycle/AboutToClose updated:<=$closeDate"
             ) {
               pageInfo {
                 hasNextPage

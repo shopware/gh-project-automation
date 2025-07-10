@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/shopware/gh-project-automation/compare/v1.9.0...v1.9.1) (2025-07-10)
+
+
+### Bug Fixes
+
+* rename close labels ([#45](https://github.com/shopware/gh-project-automation/issues/45)) ([7872e1b](https://github.com/shopware/gh-project-automation/commit/7872e1bfc83694f5472e8c7edbbd719917558de1))
+
 ## [1.9.0](https://github.com/shopware/gh-project-automation/compare/v1.8.0...v1.9.0) (2025-07-09)
 
 

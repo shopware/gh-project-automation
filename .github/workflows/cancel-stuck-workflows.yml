@@ -2,6 +2,10 @@ on:
   schedule:
     - cron: "*/15 * * * *"
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   cancel-stuck-workflows:
     runs-on: ubuntu-latest

@@ -1,3 +1,4 @@
+export * from './actions'
 export * from './branch'
 export * from './issue'
 export * from './jira'

@@ -1,0 +1,30 @@
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+
+jobs:
+  cancel-stuck-workflows:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        repo: ["SwagCommercial", "Rufus"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: octo-sts/action@v1.0.0
+        id: octo-sts
+        with:
+          scope: shopware
+          identity: StuckWorkflowCleanup
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/github-script@v7
+        env:
+          REPO: ${{ matrix.repo }}
+        with:
+          github-token: ${{ steps.octo-sts.outputs.token }}
+          script: |
+            const { cancelStuckWorkflows } = await import('${{github.workspace}}/dist/index.mjs');
+            await cancelStuckWorkflows({github, core, context}, process.env.REPO)

@@ -68,6 +68,9 @@ export async function run(method: string, ...args: string[]) {
         case "cleanupOldBranches":
             await automation.cleanupBranches(toolkit, args[0], "shopware");
             break;
+        case "cancelStuckWorkflows":
+            await automation.cancelStuckWorkflows(toolkit, args[0], "shopware");
+            break;
         default:
             // eslint-disable-next-line no-console
             console.warn("Unknown method");

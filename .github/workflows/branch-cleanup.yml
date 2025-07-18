@@ -1,0 +1,36 @@
+on:
+  schedule:
+    - cron: "* 2 * * *"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  cleanup-old-branches:
+    name: Cleanup old branches
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        repo: ["shopware", "shopware-private", "SwagCommercial", "Rufus"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: octo-sts/action@v1.0.0
+        id: octo-sts
+        with:
+          scope: shopware
+          identity: BranchCleanup
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/github-script@v7
+        env:
+          REPO: ${{ matrix.repo }}
+          DRY_RUN: true
+        with:
+          github-token: ${{ steps.octo-sts.outputs.token }}
+          script: |
+            const { cleanupBranches } = await import('${{github.workspace}}/dist/index.mjs');
+            await cleanupBranches({github, core, context}, process.env.REPO, "shopware", /^(saas\/2025\/\d+|\d+\.(\d+|x)(\.\d+|\.x)?(\.\d+|\.x)?)$/)

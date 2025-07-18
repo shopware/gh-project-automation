@@ -1,10 +1,8 @@
 import { Toolkit } from "../types";
 import { isDryRun } from "../util/dry_run";
 
-export async function getOldBranches(toolkit: Toolkit, repo: string, excludeRegex: string = "", organization: string = "shopware"): Promise<string[] | null> {
+export async function getOldBranches(toolkit: Toolkit, repo: string, excludeRegex: string | RegExp = "", organization: string = "shopware"): Promise<string[] | null> {
     const DAYS_UNTIL_STALE = 6 * 30;
-
-    const regex = new RegExp(excludeRegex);
 
     toolkit.core.info(`Getting branches for ${organization}/${repo}`);
 
@@ -86,6 +84,7 @@ export async function getOldBranches(toolkit: Toolkit, repo: string, excludeRege
     const oldBranches: string[] = [];
 
     for (const branch of branches.filter(x => x.associatedPullRequests.nodes.length == 0)) {
+        const regex = new RegExp(excludeRegex, "mg");
         if (excludeRegex != "" && regex.test(branch.name)) {
             continue;
         }
@@ -95,15 +94,15 @@ export async function getOldBranches(toolkit: Toolkit, repo: string, excludeRege
 
             oldBranches.push(branch.name);
 
-            toolkit.core.debug(`${branch.name} : ${lastUpdate}`);
+            toolkit.core.debug(`${branch.name} : ${lastUpdate} - ${(excludeRegex != "" && regex.test(branch.name))}`);
         }
     }
 
     return oldBranches;
 }
 
-export async function cleanupBranches(toolkit: Toolkit, repo: string, organization: string = "shopware") {
-    const branches = await getOldBranches(toolkit, repo, organization);
+export async function cleanupBranches(toolkit: Toolkit, repo: string, organization: string = "shopware", excludeRegex: string | RegExp = "") {
+    const branches = await getOldBranches(toolkit, repo, excludeRegex, organization);
     if (!branches) {
         toolkit.core.error("No old branches found!");
         return;

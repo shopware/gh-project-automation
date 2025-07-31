@@ -45,7 +45,7 @@ export async function getSlackUserByEmail(toolkit: Toolkit, emails: string[]): P
             continue;
         }
 
-        const user = await slackClient.getUserByEmail(email);
+        const user = await slackClient.getUserByEmail(toolkit, email);
         if (!user) {
             continue;
         }

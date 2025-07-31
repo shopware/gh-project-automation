@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.10.0](https://github.com/shopware/gh-project-automation/compare/v1.9.1...v1.10.0) (2025-07-31)
+
+
+### Features
+
+* add cancelStuckWorkflows ([#47](https://github.com/shopware/gh-project-automation/issues/47)) ([f19f388](https://github.com/shopware/gh-project-automation/commit/f19f388fbccaac438814cec255d2672b269aecfc))
+
+
+### Bug Fixes
+
+* catch exception when slack user was not found ([#51](https://github.com/shopware/gh-project-automation/issues/51)) ([2698d7c](https://github.com/shopware/gh-project-automation/commit/2698d7c47ef50a937619291dbb86b774a0a80ddb))
+* missing permissions in cancel-stuck-workflows ([#49](https://github.com/shopware/gh-project-automation/issues/49)) ([b64413f](https://github.com/shopware/gh-project-automation/commit/b64413faf65e6a601d8895f0cdd7259f72cd6861))
+
 ## [1.9.1](https://github.com/shopware/gh-project-automation/compare/v1.9.0...v1.9.1) (2025-07-10)
 
 

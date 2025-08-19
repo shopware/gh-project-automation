@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/shopware/gh-project-automation/compare/v1.10.0...v1.11.0) (2025-08-19)
+
+
+### Features
+
+* add setMilestoneForPR ([#53](https://github.com/shopware/gh-project-automation/issues/53)) ([67682e7](https://github.com/shopware/gh-project-automation/commit/67682e7128ee1145d22b2bbd0658e01af17698d6))
+
 ## [1.10.0](https://github.com/shopware/gh-project-automation/compare/v1.9.1...v1.10.0) (2025-07-31)
 
 

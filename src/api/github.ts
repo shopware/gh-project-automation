@@ -1,4 +1,4 @@
-import {GitHubComment, GitHubIssue, Label, Toolkit} from "../types";
+import { GitHubComment, GitHubIssue, GitHubMilestone, Label, Toolkit } from "../types";
 
 export async function closeIssue(toolkit: Toolkit, issueId: string, reason: string = "NOT_PLANNED") {
     const res = await toolkit.github.graphql(/* GraphQL */ `
@@ -684,4 +684,21 @@ export async function getVerifiedDomainEmails(toolkit: Toolkit, login: string, o
         });
 
     return res.user.organizationVerifiedDomainEmails;
+}
+
+/**
+ * getMilestoneByTitle fetches a milestone by it's title.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param repo - The name of the repository
+ * @param milestoneTitle the title of the milestone
+ * @param organization - The organization name of the repository
+ */
+export async function getMilestoneByTitle(toolkit: Toolkit, repo: string, milestoneTitle: string, organization: string = "shopware"): Promise<GitHubMilestone | undefined> {
+    const milestones = await toolkit.github.paginate(toolkit.github.rest.issues.listMilestones, {
+        owner: organization,
+        repo: repo
+    });
+
+    return milestones.find(x => x.title == milestoneTitle)
 }

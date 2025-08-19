@@ -43,3 +43,21 @@ export type Labelable = {
         }]
     }
 }
+
+export type GitHubMilestone = {
+    id: number
+    url: string
+    html_url: string
+    labels_url: string
+    node_id: string
+    number: number
+    state: "open" | "closed"
+    title: string
+    description: string | null
+    created_at: string
+    updated_at: string
+    closed_at: string | null
+    due_on: string | null
+    open_issues: number
+    closed_issues: number
+}

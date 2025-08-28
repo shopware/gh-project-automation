@@ -39,7 +39,7 @@ export async function setMilestoneForPR(toolkit: Toolkit) {
         milestone = res.data
     }
 
-    const linkedIssue = await getDevelopmentIssueForPullRequest(toolkit, repo, pr.number, pr.head, pr.assignee);
+    const linkedIssue = await getDevelopmentIssueForPullRequest(toolkit, `${owner}/${repo}`, pr.number, pr.head, pr.assignee);
     if (linkedIssue && linkedIssue.number) {
         toolkit.core.info(`Found linked issue (#${linkedIssue.number}), will add issue to milestone`);
         await toolkit.github.rest.issues.update({

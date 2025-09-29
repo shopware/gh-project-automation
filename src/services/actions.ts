@@ -41,3 +41,69 @@ export async function cancelStuckWorkflows(toolkit: Toolkit, repo: string, organ
         }
     }
 }
+
+export async function checkMissingLiceneInRepos(toolkit: Toolkit, organization: string = "shopware") {
+    const excludeRepositories: Array<string> = [];
+
+    let currentCursor = null;
+    type ObjectsResponse = {
+        organization: {
+            repositories: {
+                pageInfo: {
+                    startCursor: string,
+                    endCursor: string,
+                    hasNextPage: boolean
+                },
+                nodes: Array<{
+                    name: string,
+                    visibility: string,
+                    object: { byteSize: number } | null
+                }>
+            }
+        }
+    };
+
+    let reposWithoutLicenseCount = 0;
+
+    while (true) {
+        const res: ObjectsResponse = await toolkit.github.graphql<ObjectsResponse>(/* GraphQL */ `
+                query getLicenseFile($cursor: String, $organization: String!){
+                  organization(login: $organization) {
+                    repositories(first: 100, after: $cursor) {
+                      pageInfo {
+                        startCursor
+                        endCursor
+                        hasNextPage
+                      }
+                      nodes {
+                        name
+                        visibility
+                        object(expression: "HEAD:LICENSE") {
+                          ... on Blob {
+                            byteSize
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                `,
+            {
+                cursor: currentCursor,
+                organization
+            }
+        );
+        res.organization.repositories.nodes.filter(x => !excludeRepositories.includes(x.name) && x.visibility === "PUBLIC" && x.object === null).forEach(x => {
+            toolkit.core.error(`${x.name} doesn't have a LICENSE`); reposWithoutLicenseCount++;
+        });
+        if (!res.organization.repositories.pageInfo.hasNextPage) {
+            break;
+        }
+        currentCursor = res.organization.repositories.pageInfo.endCursor;
+
+    }
+
+    if (reposWithoutLicenseCount > 0) {
+        toolkit.core.setFailed(`${reposWithoutLicenseCount} repositories without LICENSE detected!`);
+    }
+}

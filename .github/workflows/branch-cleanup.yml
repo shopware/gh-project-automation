@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        repo: ["shopware", "shopware-private", "SwagCommercial", "Rufus"]
+        repo: ["shopware", "shopware-private", "SwagCommercial", "Rufus", "saas"]
     steps:
       - uses: actions/checkout@v4
       - uses: octo-sts/action@v1.0.0

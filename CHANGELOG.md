@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.1](https://github.com/shopware/gh-project-automation/compare/v1.12.0...v1.12.1) (2025-10-29)
+
+
+### Bug Fixes
+
+* add repository.url ([#62](https://github.com/shopware/gh-project-automation/issues/62)) ([050206f](https://github.com/shopware/gh-project-automation/commit/050206f98be67006294ca39297b304cf6ad29dc0))
+
 ## [1.12.0](https://github.com/shopware/gh-project-automation/compare/v1.11.1...v1.12.0) (2025-10-29)
 
 

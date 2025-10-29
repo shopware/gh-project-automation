@@ -25,6 +25,10 @@
     "clean": true,
     "sourcemap": true
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shopware/gh-project-automation.git"
+  },
   "keywords": [
     "shopware",
     "github",

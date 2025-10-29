@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.12.0](https://github.com/shopware/gh-project-automation/compare/v1.11.1...v1.12.0) (2025-10-29)
+
+
+### Features
+
+* add checkMissingLicenseInRepos ([#57](https://github.com/shopware/gh-project-automation/issues/57)) ([b75be7b](https://github.com/shopware/gh-project-automation/commit/b75be7b205df96ebbfd08581f4891d982df677bd))
+* add saas to branch cleanup ([#60](https://github.com/shopware/gh-project-automation/issues/60)) ([8b37ad3](https://github.com/shopware/gh-project-automation/commit/8b37ad315fedc7fc9df851c388dd0abedaed8547))
+
 ## [1.11.1](https://github.com/shopware/gh-project-automation/compare/v1.11.0...v1.11.1) (2025-08-28)
 
 

@@ -1,5 +1,6 @@
 import { getMilestoneByTitle } from "../api";
 import { Toolkit } from "../types";
+import { isDryRun } from "../util/dry_run";
 import { getDevelopmentIssueForPullRequest } from "./issue";
 
 /**
@@ -59,4 +60,66 @@ export async function setMilestoneForPR(toolkit: Toolkit) {
         issue_number: pr.number,
         milestone: milestone.number
     });
+}
+
+/**
+ * updateMilestonesOnRelease updates the milestones on release if a pr didn'it got merged in the merge window.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ */
+export async function updateMilestonesOnRelease(toolkit: Toolkit) {
+    if (process.env.TAG === undefined) {
+        toolkit.core.error("Environment variable TAG is missing!");
+        return 1;
+    }
+    const milestone = process.env.TAG.substring(1);
+    const regex = /^([0-9]+).([0-9]+).([0-9]+).([0-9]+)$/;
+    const regexMatches = regex.exec(milestone);
+    if (regexMatches?.length === undefined || regexMatches?.length < 4) {
+        toolkit.core.error("Environment variable TAG has a wrong value!");
+        return 1;
+    }
+    const newMilestone = `${regexMatches[1]}.${regexMatches[2]}.${parseInt(regexMatches[3], 10) + 1}.0`;
+    const res = await toolkit.github.graphql<{
+        repository: {
+            pullRequests: {
+                nodes: [{
+                    title: string,
+                    number: number
+                }]
+            }
+        }
+    }>(`
+      query ($milestone: String!) {
+        repository(owner: "shopware", name: "shopware") {
+          pullRequests(labels: [$milestone], states: OPEN, first: 100) {
+            nodes {
+              title
+              number
+            }
+          }
+        }
+      }`, { milestone: `milestone/${milestone}` });
+
+    for (const pr of res.repository.pullRequests.nodes) {
+        if (isDryRun()) {
+            toolkit.core.info(`Would change milestone of ${pr.number} - ${pr.title}`);
+            continue;
+        }
+        await toolkit.github.rest.issues.removeLabel({
+            owner: "shopware",
+            repo: "shopware",
+            issue_number: pr.number,
+            name: `milestone/${milestone}`
+        });
+
+        await toolkit.github.rest.issues.addLabels({
+            owner: "shopware",
+            repo: "shopware",
+            issue_number: pr.number,
+            labels: [newMilestone],
+        });
+
+        toolkit.core.info(`Changed the milestone from ${milestone} to ${newMilestone} for ${pr.number} - ${pr.title}`);
+    }
 }

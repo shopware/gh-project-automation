@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/shopware/gh-project-automation/compare/v1.12.1...v1.13.0) (2025-11-19)
+
+
+### Features
+
+* add updateMilestonesOnRelease ([#64](https://github.com/shopware/gh-project-automation/issues/64)) ([c5453f7](https://github.com/shopware/gh-project-automation/commit/c5453f79647f4530ac763b44503b47e6f986ce4b))
+
 ## [1.12.1](https://github.com/shopware/gh-project-automation/compare/v1.12.0...v1.12.1) (2025-10-29)
 
 

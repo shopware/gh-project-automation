@@ -116,7 +116,7 @@ export async function cleanupBranches(toolkit: Toolkit, repo: string, organizati
         toolkit.github.rest.git.deleteRef({
             owner: organization,
             repo: repo,
-            ref: branch
+            ref: `heads/${branch}`
         });
     }
 }

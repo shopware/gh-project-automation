@@ -4,8 +4,8 @@ import {
     getPullRequests,
     getVerifiedDomainEmails
 } from "../api";
-import {Toolkit} from "../types";
-import {isDryRun} from "../util/dry_run";
+import { Toolkit } from "../types";
+import { isDryRun } from "../util/dry_run";
 
 /**
  * manageOldPullRequests checks for old pull requests and closes them if they have been inactive for a specified number of days.
@@ -15,7 +15,7 @@ import {isDryRun} from "../util/dry_run";
  * @param days - Consider pull requests old after this many days of inactivity.
  * @param close - If true, the pull request will be closed after sending the reminder.
  */
-export async function manageOldPullRequests(toolkit: Toolkit, organization: string = "shopware", days: number = 7, close: boolean = false) {
+export async function manageOldPullRequests(toolkit: Toolkit, organization: string = "shopware", days: number = 7, close: boolean = false, excludedRepositories: string[] = []) {
     const pullRequests = await getPullRequests(
         toolkit,
         `org:${organization} is:pr is:open draft:false updated:<${new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()}`
@@ -23,6 +23,10 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
     const closeMsg = `This pull request has been closed automatically. If you would like to continue working on it, please feel free to re-open it!`;
 
     for (const pr of pullRequests) {
+        if (excludedRepositories.includes(pr.repository.name)) {
+            toolkit.core.debug(`${pr.repository.name} is on the excludedRepositories list. Skipping...`);
+            continue;
+        }
         const assignee = pr.assignees.nodes[0];
 
         if (!assignee) {

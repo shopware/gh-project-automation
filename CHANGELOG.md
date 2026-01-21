@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/shopware/gh-project-automation/compare/v1.13.0...v1.14.0) (2026-01-21)
+
+
+### Features
+
+* add excludedRepositories to manageOldPullRequests ([#67](https://github.com/shopware/gh-project-automation/issues/67)) ([6eef6c3](https://github.com/shopware/gh-project-automation/commit/6eef6c3883e75d1a2e29e7a8d807e067649eb677))
+
 ## [1.13.0](https://github.com/shopware/gh-project-automation/compare/v1.12.1...v1.13.0) (2025-11-19)
 
 

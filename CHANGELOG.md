@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.1](https://github.com/shopware/gh-project-automation/compare/v1.14.0...v1.14.1) (2026-02-03)
+
+
+### Bug Fixes
+
+* **deps:** update github dependencies ([#69](https://github.com/shopware/gh-project-automation/issues/69)) ([201663a](https://github.com/shopware/gh-project-automation/commit/201663ac58419a471ddc9e39f14bb9b82ea704fe))
+
 ## [1.14.0](https://github.com/shopware/gh-project-automation/compare/v1.13.0...v1.14.0) (2026-01-21)
 
 

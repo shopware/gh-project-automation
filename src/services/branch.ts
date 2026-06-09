@@ -1,5 +1,6 @@
 import { Toolkit } from "../types";
 import { isDryRun } from "../util/dry_run";
+import { rateLimitedRun } from "../util/rate_limiting";
 
 export async function getOldBranches(toolkit: Toolkit, repo: string, excludeRegex: string | RegExp = "", organization: string = "shopware"): Promise<string[] | null> {
     const DAYS_UNTIL_STALE = 6 * 30;
@@ -107,16 +108,23 @@ export async function cleanupBranches(toolkit: Toolkit, repo: string, organizati
         toolkit.core.error("No old branches found!");
         return;
     }
-    for (const branch of branches) {
-        if (isDryRun()) {
+
+    toolkit.core.info(`Cleaning up ${branches.length} branch(es) with rate limiting...`);
+
+    if (isDryRun()) {
+        for (const branch of branches) {
             toolkit.core.info(`Would delete ${branch}`);
-            continue;
         }
+        return;
+    }
+
+    // Rate-limit the actual deletions
+    await rateLimitedRun(branches, async branch => {
         toolkit.core.info(`Deleting ${branch}...`);
-        toolkit.github.rest.git.deleteRef({
+        await toolkit.github.rest.git.deleteRef({
             owner: organization,
             repo: repo,
             ref: `heads/${branch}`
         });
-    }
+    });
 }

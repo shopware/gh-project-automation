@@ -61,7 +61,7 @@ jobs:
       - name: Send Slack notification
         if: steps.dates.outputs.notify == 'true'
         run: |
-          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+          curl -s -X POST "${{ secrets.ANNOUNCE_MINOR_RELEASE_SLACK_WEBHOOK_URL }}" \
             -H 'Content-Type: application/json' \
             -d '{
               "onprem_release_date": "${{ steps.dates.outputs.onprem_release_date }}",

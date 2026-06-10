@@ -1,0 +1,70 @@
+name: Announce minor release
+
+on:
+  schedule:
+    - cron: "0 8 15-24 * *"
+  workflow_dispatch:
+
+jobs:
+  check-and-notify:
+    name: Check date and notify Slack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Get Shopware version
+        id: version
+        uses: shopware/github-actions/shopware-version@main
+
+      - name: Calculate next minor version
+        id: next-version
+        run: |
+          CURRENT="${{ steps.version.outputs.shopware-version }}"
+          IFS='.' read -r -a parts <<< "$CURRENT"
+          parts[2]=$((parts[2] + 1))
+          echo "next_minor=${parts[0]}.${parts[1]}.${parts[2]}.${parts[3]}" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate release dates
+        id: dates
+        run: |
+          TODAY=$(date +%Y-%m-%d)
+          YEAR=$(date +%Y)
+          MONTH=$(date +%m)
+
+          NEXT_MONTH=$((10#$MONTH + 1))
+          NEXT_YEAR=$YEAR
+          if [ $NEXT_MONTH -eq 13 ]; then
+            NEXT_MONTH=1
+            NEXT_YEAR=$((YEAR + 1))
+          fi
+          NEXT_MONTH=$(printf "%02d" $NEXT_MONTH)
+
+          for DAY in $(seq 1 7); do
+            DATE_CHECK="$NEXT_YEAR-$NEXT_MONTH-$(printf "%02d" $DAY)"
+            DOW=$(date -d "$DATE_CHECK" +%u)
+            if [ "$DOW" -eq 1 ]; then
+              FIRST_MONDAY="$DATE_CHECK"
+              break
+            fi
+          done
+
+          BRANCHOFF=$(date -d "$FIRST_MONDAY - 14 days" +%Y-%m-%d)
+          echo "onprem_release_date=$FIRST_MONDAY" >> "$GITHUB_OUTPUT"
+          echo "branchoff_date=$BRANCHOFF" >> "$GITHUB_OUTPUT"
+
+          if [ "$TODAY" = "$BRANCHOFF" ]; then
+            echo "notify=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notify=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send Slack notification
+        if: steps.dates.outputs.notify == 'true'
+        run: |
+          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "onprem_release_date": "${{ steps.dates.outputs.onprem_release_date }}",
+              "branchoff_date": "${{ steps.dates.outputs.branchoff_date }}",
+              "next_minor_release": "${{ steps.next-version.outputs.next_minor }}"
+            }'

@@ -1,4 +1,4 @@
-name: Announce minor release
+name: Announce branch-off and minor release
 
 on:
   schedule:

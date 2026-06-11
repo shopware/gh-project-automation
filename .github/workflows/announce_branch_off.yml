@@ -2,7 +2,7 @@ name: Announce branch-off and minor release
 
 on:
   schedule:
-    - cron: "0 8 15-24 * *"
+    - cron: "0 8 10-19 * *"
   workflow_dispatch:
 
 jobs:
@@ -43,11 +43,14 @@ jobs:
             fi
           done
 
+          TODAY=$(date +%Y-%m-%d)
           BRANCHOFF=$(date -d "$FIRST_MONDAY - 14 days" +%Y-%m-%d)
+          ANNOUNCEMENT=$(date -d "$BRANCHOFF - 5 days" +%Y-%m-%d)
+
           echo "onprem_release_date=$FIRST_MONDAY" >> "$GITHUB_OUTPUT"
           echo "branchoff_date=$BRANCHOFF" >> "$GITHUB_OUTPUT"
 
-          if [ "$TODAY" = "$BRANCHOFF" ]; then
+          if [ "$TODAY" = "$ANNOUNCEMENT" ]; then
             echo "notify=true" >> "$GITHUB_OUTPUT"
           else
             echo "notify=false" >> "$GITHUB_OUTPUT"

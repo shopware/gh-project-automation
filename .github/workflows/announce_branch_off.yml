@@ -52,8 +52,8 @@ jobs:
 
           echo "today=$TODAY" >> "$GITHUB_OUTPUT"
           echo "announcement_date=$ANNOUNCEMENT" >> "$GITHUB_OUTPUT"
-          echo "onprem_release_date=$FIRST_MONDAY" >> "$GITHUB_OUTPUT"
-          echo "branchoff_date=$BRANCHOFF" >> "$GITHUB_OUTPUT"
+          echo "onprem_release_date=$(date -d "$FIRST_MONDAY" "+%A, %B %-d, %Y")" >> "$GITHUB_OUTPUT"
+          echo "branchoff_date=$(date -d "$BRANCHOFF" "+%A, %B %-d, %Y")" >> "$GITHUB_OUTPUT"
 
           if [ "$TODAY" = "$ANNOUNCEMENT" ]; then
             echo "notify=true" >> "$GITHUB_OUTPUT"

@@ -61,13 +61,14 @@ jobs:
             echo "notify=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Debug dates
+      - name: Debug output
         run: |
-          echo "today:              ${{ steps.dates.outputs.today }}"
+          echo "today:               ${{ steps.dates.outputs.today }}"
           echo "onprem_release_date: ${{ steps.dates.outputs.onprem_release_date }}"
           echo "branchoff_date:      ${{ steps.dates.outputs.branchoff_date }}"
           echo "announcement_date:   ${{ steps.dates.outputs.announcement_date }}"
           echo "notify:              ${{ steps.dates.outputs.notify }}"
+          echo next_minor_release:   ${{ steps.next-version.outputs.next_minor }}"
 
       - name: Send Slack notification
         if: steps.dates.outputs.notify == 'true'

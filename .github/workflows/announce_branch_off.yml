@@ -68,7 +68,7 @@ jobs:
           echo "branchoff_date:      ${{ steps.dates.outputs.branchoff_date }}"
           echo "announcement_date:   ${{ steps.dates.outputs.announcement_date }}"
           echo "notify:              ${{ steps.dates.outputs.notify }}"
-          echo next_minor_release:   ${{ steps.next-version.outputs.next_minor }}"
+          echo "next_minor_release:  ${{ steps.next-version.outputs.next_minor }}"
 
       - name: Send Slack notification
         if: steps.dates.outputs.notify == 'true'

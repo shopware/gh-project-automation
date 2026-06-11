@@ -27,17 +27,14 @@ jobs:
       - name: Calculate release dates
         id: dates
         run: |
-          TODAY=$(date +%Y-%m-%d)
-          YEAR=$(date +%Y)
-          MONTH=$(date +%m)
+          TODAY_YEAR=$(date "+%Y")
+          TODAY_MONTH=$(date "+%m")
+          FIRST_DAY_NEXT_MONTH=$(date -d "$TODAY_YEAR-$TODAY_MONTH-01 +1 month" "+%Y-%m-%d")
 
-          NEXT_MONTH=$((10#$MONTH + 1))
-          NEXT_YEAR=$YEAR
-          if [ $NEXT_MONTH -eq 13 ]; then
-            NEXT_MONTH=1
-            NEXT_YEAR=$((YEAR + 1))
-          fi
-          NEXT_MONTH=$(printf "%02d" $NEXT_MONTH)
+          NEXT_MONTH=$(date -d "$FIRST_DAY_NEXT_MONTH" "+%m")
+          NEXT_YEAR=$(date -d "$FIRST_DAY_NEXT_MONTH" "+%Y")
+
+
 
           for DAY in $(seq 1 7); do
             DATE_CHECK="$NEXT_YEAR-$NEXT_MONTH-$(printf "%02d" $DAY)"

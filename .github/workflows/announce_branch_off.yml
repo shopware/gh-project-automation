@@ -34,8 +34,6 @@ jobs:
           NEXT_MONTH=$(date -d "$FIRST_DAY_NEXT_MONTH" "+%m")
           NEXT_YEAR=$(date -d "$FIRST_DAY_NEXT_MONTH" "+%Y")
 
-
-
           for DAY in $(seq 1 7); do
             DATE_CHECK="$NEXT_YEAR-$NEXT_MONTH-$(printf "%02d" $DAY)"
             DOW=$(date -d "$DATE_CHECK" +%u)

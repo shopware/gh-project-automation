@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 8 10-19 * *"
   workflow_dispatch:
+    inputs:
+      override_date:
+        description: "Override today's date for testing (YYYY-MM-DD)"
+        required: false
+        type: string
 
 jobs:
   check-and-notify:
@@ -43,10 +48,13 @@ jobs:
             fi
           done
 
-          TODAY=$(date +%Y-%m-%d)
+          TODAY="${{ inputs.override_date }}"
+          TODAY="${TODAY:-$(date +%Y-%m-%d)}"
           BRANCHOFF=$(date -d "$FIRST_MONDAY - 14 days" +%Y-%m-%d)
           ANNOUNCEMENT=$(date -d "$BRANCHOFF - 5 days" +%Y-%m-%d)
 
+          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
+          echo "announcement_date=$ANNOUNCEMENT" >> "$GITHUB_OUTPUT"
           echo "onprem_release_date=$FIRST_MONDAY" >> "$GITHUB_OUTPUT"
           echo "branchoff_date=$BRANCHOFF" >> "$GITHUB_OUTPUT"
 
@@ -55,6 +63,14 @@ jobs:
           else
             echo "notify=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Debug dates
+        run: |
+          echo "today:              ${{ steps.dates.outputs.today }}"
+          echo "onprem_release_date: ${{ steps.dates.outputs.onprem_release_date }}"
+          echo "branchoff_date:      ${{ steps.dates.outputs.branchoff_date }}"
+          echo "announcement_date:   ${{ steps.dates.outputs.announcement_date }}"
+          echo "notify:              ${{ steps.dates.outputs.notify }}"
 
       - name: Send Slack notification
         if: steps.dates.outputs.notify == 'true'

@@ -1,0 +1,68 @@
+name: Announce branch-off and minor release
+
+on:
+  schedule:
+    - cron: "0 8 10-19 * *"
+  workflow_dispatch:
+
+jobs:
+  check-and-notify:
+    name: Check date and notify Slack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Get Shopware version
+        id: version
+        uses: shopware/github-actions/shopware-version@main
+
+      - name: Calculate next minor version
+        id: next-version
+        run: |
+          CURRENT="${{ steps.version.outputs.shopware-version }}"
+          IFS='.' read -r -a parts <<< "$CURRENT"
+          parts[2]=$((parts[2] + 1))
+          echo "next_minor=${parts[0]}.${parts[1]}.${parts[2]}.${parts[3]}" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate release dates
+        id: dates
+        run: |
+          TODAY_YEAR=$(date "+%Y")
+          TODAY_MONTH=$(date "+%m")
+          FIRST_DAY_NEXT_MONTH=$(date -d "$TODAY_YEAR-$TODAY_MONTH-01 +1 month" "+%Y-%m-%d")
+
+          NEXT_MONTH=$(date -d "$FIRST_DAY_NEXT_MONTH" "+%m")
+          NEXT_YEAR=$(date -d "$FIRST_DAY_NEXT_MONTH" "+%Y")
+
+          for DAY in $(seq 1 7); do
+            DATE_CHECK="$NEXT_YEAR-$NEXT_MONTH-$(printf "%02d" $DAY)"
+            DOW=$(date -d "$DATE_CHECK" +%u)
+            if [ "$DOW" -eq 1 ]; then
+              FIRST_MONDAY="$DATE_CHECK"
+              break
+            fi
+          done
+
+          TODAY=$(date +%Y-%m-%d)
+          BRANCHOFF=$(date -d "$FIRST_MONDAY - 14 days" +%Y-%m-%d)
+          ANNOUNCEMENT=$(date -d "$BRANCHOFF - 5 days" +%Y-%m-%d)
+
+          echo "onprem_release_date=$FIRST_MONDAY" >> "$GITHUB_OUTPUT"
+          echo "branchoff_date=$BRANCHOFF" >> "$GITHUB_OUTPUT"
+
+          if [ "$TODAY" = "$ANNOUNCEMENT" ]; then
+            echo "notify=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "notify=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send Slack notification
+        if: steps.dates.outputs.notify == 'true'
+        run: |
+          curl -s -X POST "${{ secrets.ANNOUNCE_MINOR_RELEASE_SLACK_WEBHOOK_URL }}" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "onprem_release_date": "${{ steps.dates.outputs.onprem_release_date }}",
+              "branchoff_date": "${{ steps.dates.outputs.branchoff_date }}",
+              "next_minor_release": "${{ steps.next-version.outputs.next_minor }}"
+            }'

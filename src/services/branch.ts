@@ -2,6 +2,17 @@ import { Toolkit } from "../types";
 import { isDryRun } from "../util/dry_run";
 import { rateLimitedRun } from "../util/rate_limiting";
 
+/**
+ * Branches that must never be deleted by {@link cleanupBranches}. Matches
+ * long-lived release branches such as `6.5`, `6.5.0`, `6.6.x` and SaaS release
+ * branches like `saas/2025/12`.
+ *
+ * This is the single source of truth for the exclude pattern used by the
+ * branch-cleanup workflow; it is exported so it can be unit-tested and imported
+ * by the workflow instead of being duplicated as a YAML string literal.
+ */
+export const protectedReleaseBranchRegex = /^(saas\/2025\/\d+|\d+\.(\d+|x)(\.\d+|\.x)?(\.\d+|\.x)?)$/;
+
 export async function getOldBranches(toolkit: Toolkit, repo: string, excludeRegex: string | RegExp = "", organization: string = "shopware"): Promise<string[] | null> {
     const DAYS_UNTIL_STALE = 6 * 30;
 

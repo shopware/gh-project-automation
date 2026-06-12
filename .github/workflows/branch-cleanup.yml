@@ -1,7 +1,7 @@
 name: Branch cleanup
 on:
   schedule:
-    - cron: "* 2 * * *"
+    - cron: "0 2 * * *"
   workflow_dispatch:
 
 permissions:
@@ -34,5 +34,5 @@ jobs:
         with:
           github-token: ${{ steps.octo-sts.outputs.token }}
           script: |
-            const { cleanupBranches } = await import('${{github.workspace}}/dist/index.mjs');
-            await cleanupBranches({github, core, context}, process.env.REPO, "shopware", /^(saas\/2025\/\d+|\d+\.(\d+|x)(\.\d+|\.x)?(\.\d+|\.x)?)$/)
+            const { cleanupBranches, protectedReleaseBranchRegex } = await import('${{github.workspace}}/dist/index.mjs');
+            await cleanupBranches({github, core, context}, process.env.REPO, "shopware", protectedReleaseBranchRegex)

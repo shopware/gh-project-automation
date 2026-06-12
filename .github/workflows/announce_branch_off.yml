@@ -16,6 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build
 
       - name: Get Shopware version
         id: version
@@ -34,38 +39,18 @@ jobs:
 
       - name: Calculate release dates
         id: dates
-        run: |
-          TODAY_YEAR=$(date "+%Y")
-          TODAY_MONTH=$(date "+%m")
-          FIRST_DAY_NEXT_MONTH=$(date -d "$TODAY_YEAR-$TODAY_MONTH-01 +1 month" "+%Y-%m-%d")
-
-          NEXT_MONTH=$(date -d "$FIRST_DAY_NEXT_MONTH" "+%m")
-          NEXT_YEAR=$(date -d "$FIRST_DAY_NEXT_MONTH" "+%Y")
-
-          for DAY in $(seq 1 7); do
-            DATE_CHECK="$NEXT_YEAR-$NEXT_MONTH-$(printf "%02d" $DAY)"
-            DOW=$(date -d "$DATE_CHECK" +%u)
-            if [ "$DOW" -eq 1 ]; then
-              FIRST_MONDAY="$DATE_CHECK"
-              break
-            fi
-          done
-
-          TODAY="${{ inputs.override_date }}"
-          TODAY="${TODAY:-$(date +%Y-%m-%d)}"
-          BRANCHOFF=$(date -d "$FIRST_MONDAY - 14 days" +%Y-%m-%d)
-          ANNOUNCEMENT=$(date -d "$BRANCHOFF - 5 days" +%Y-%m-%d)
-
-          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
-          echo "announcement_date=$ANNOUNCEMENT" >> "$GITHUB_OUTPUT"
-          echo "onprem_release_date=$(date -d "$FIRST_MONDAY" "+%A, %B %-d, %Y")" >> "$GITHUB_OUTPUT"
-          echo "branchoff_date=$(date -d "$BRANCHOFF" "+%A, %B %-d, %Y")" >> "$GITHUB_OUTPUT"
-
-          if [ "$TODAY" = "$ANNOUNCEMENT" ]; then
-            echo "notify=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "notify=false" >> "$GITHUB_OUTPUT"
-          fi
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OVERRIDE_DATE: ${{ inputs.override_date }}
+        with:
+          script: |
+            const { computeReleaseSchedule } = await import('${{ github.workspace }}/dist/index.mjs');
+            const schedule = computeReleaseSchedule(new Date(), process.env.OVERRIDE_DATE);
+            core.setOutput('today', schedule.today);
+            core.setOutput('announcement_date', schedule.announcementDate);
+            core.setOutput('onprem_release_date', schedule.onpremReleaseDate);
+            core.setOutput('branchoff_date', schedule.branchoffDate);
+            core.setOutput('notify', String(schedule.notify));
 
       - name: Debug output
         run: |

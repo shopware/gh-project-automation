@@ -8,6 +8,8 @@
     "prepack": "unbuild",
     "lint": "eslint .",
     "lint-fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "cli": "npx tsx ./src/scripts/cli.ts"
   },
   "exports": {
@@ -51,7 +53,8 @@
     "eslint": "^9.22.0",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.26.1",
-    "unbuild": "^3.5.0"
+    "unbuild": "^3.5.0",
+    "vitest": "^4.1.8"
   },
   "dependencies": {
     "@slack/web-api": "^7.9.2"

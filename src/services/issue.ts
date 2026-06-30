@@ -282,7 +282,7 @@ export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, org: 
             issue: {
                 timelineItems: {
                     nodes: Array<{
-                        closer: {
+                        closer?: {
                             url: string
                         }
                     }>
@@ -321,7 +321,11 @@ export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, org: 
     }
 
     if (res.repository.issue.timelineItems.nodes.length > 1) {
-        const prUrls = res.repository.issue.timelineItems.nodes.map(x => x.closer.url);
+        const prUrls = res.repository.issue.timelineItems.nodes.map(x => x.closer?.url);
+        if (prUrls.length == 0) {
+            toolkit.core.warning("Can' get pr urls from timeline items");
+            return;
+        }
         const comment = await toolkit.github.rest.issues.createComment({
             owner: org,
             repo,
@@ -335,7 +339,11 @@ export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, org: 
 
         toolkit.core.info(`Comment created: ${comment.data.url}`);
     } else {
-        const prUrl = res.repository.issue.timelineItems.nodes[0].closer.url;
+        const prUrl = res.repository.issue.timelineItems.nodes[0].closer?.url;
+        if (!prUrl) {
+            toolkit.core.warning("Can' get pr url from timeline item");
+            return;
+        }
         const comment = await toolkit.github.rest.issues.createComment({
             owner: org,
             repo,

@@ -276,7 +276,7 @@ export async function findWithProjectItems(toolkit: Toolkit) {
     }
 }
 
-export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, org: string = "shopware", repo: string = "shopwware") {
+export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, org: string = "shopware", repo: string = "shopware") {
     type ClosingPRResponse = {
         repository: {
             issue: {

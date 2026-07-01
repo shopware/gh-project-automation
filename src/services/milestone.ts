@@ -62,8 +62,134 @@ export async function setMilestoneForPR(toolkit: Toolkit) {
     });
 }
 
+/** Matches a full four-segment Shopware version, e.g. "6.7.10.0". */
+const VERSION_REGEX = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/;
+
+export type MoveMilestoneLabelsOptions = {
+    /** Current version whose milestone label should be moved, e.g. "6.7.10.0". */
+    version: string;
+    /** Repository owner. Defaults to "shopware". */
+    owner?: string;
+    /** Repository name. Defaults to "shopware". */
+    repo?: string;
+    /**
+     * When set, only PRs targeting this base branch are relabelled. PRs
+     * targeting a release branch follow a different milestone scheme and must
+     * not be bumped, so callers relabelling trunk PRs should pass "trunk".
+     * When omitted, PRs targeting any base branch are relabelled.
+     */
+    baseRefName?: string;
+    /** Overrides the DRY_RUN env detection when provided. */
+    dryRun?: boolean;
+};
+
 /**
- * updateMilestonesOnRelease updates the milestones on release if a pr didn'it got merged in the merge window.
+ * bumpPatchVersion returns the next version by incrementing the third
+ * (patch) segment, e.g. "6.7.10.0" -> "6.7.11.0". Returns undefined for input
+ * that isn't a full four-segment version.
+ */
+function bumpPatchVersion(version: string): string | undefined {
+    const matches = VERSION_REGEX.exec(version);
+    if (!matches) {
+        return undefined;
+    }
+    return `${matches[1]}.${matches[2]}.${parseInt(matches[3], 10) + 1}.0`;
+}
+
+/**
+ * findOpenPullRequestsWithLabel returns all open PRs carrying `label`,
+ * optionally restricted to those targeting `baseRefName`. Paginates through
+ * every result page.
+ */
+async function findOpenPullRequestsWithLabel(toolkit: Toolkit, owner: string, repo: string, label: string, baseRefName?: string): Promise<{ number: number, title: string }[]> {
+    const query = `
+      query ($owner: String!, $repo: String!, $label: String!, $baseRefName: String, $after: String) {
+        repository(owner: $owner, name: $repo) {
+          pullRequests(labels: [$label], baseRefName: $baseRefName, states: OPEN, first: 100, after: $after) {
+            pageInfo { hasNextPage endCursor }
+            nodes { number title }
+          }
+        }
+      }`;
+
+    const pullRequests: { number: number, title: string }[] = [];
+    let after: string | undefined = undefined;
+
+    do {
+        const res: {
+            repository: {
+                pullRequests: {
+                    pageInfo: { hasNextPage: boolean, endCursor: string | null },
+                    nodes: { number: number, title: string }[],
+                }
+            }
+        } = await toolkit.github.graphql(query, { owner, repo, label, baseRefName: baseRefName ?? null, after });
+
+        pullRequests.push(...res.repository.pullRequests.nodes);
+        after = res.repository.pullRequests.pageInfo.hasNextPage ? res.repository.pullRequests.pageInfo.endCursor ?? undefined : undefined;
+    } while (after);
+
+    return pullRequests;
+}
+
+/**
+ * moveMilestoneLabelsToNextVersion moves the `milestone/<version>` label to the
+ * next patch version (`milestone/<version+1>`) on every open PR that still
+ * carries it. It is used both when a release is tagged and when a release
+ * branch is split off, so the operation is fully parameterized.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param options - see {@link MoveMilestoneLabelsOptions}
+ */
+export async function moveMilestoneLabelsToNextVersion(toolkit: Toolkit, options: MoveMilestoneLabelsOptions): Promise<void> {
+    const owner = options.owner ?? "shopware";
+    const repo = options.repo ?? "shopware";
+    const dryRun = options.dryRun ?? isDryRun();
+
+    const nextVersion = bumpPatchVersion(options.version);
+    if (!nextVersion) {
+        throw new Error(`"${options.version}" is not a valid version (expected e.g. "6.7.10.0").`);
+    }
+
+    const currentLabel = `milestone/${options.version}`;
+    const nextLabel = `milestone/${nextVersion}`;
+
+    if (dryRun) {
+        toolkit.core.info("Running in DRY RUN mode - no labels will be created or changed.");
+    }
+
+    // PRs targeting a version branch follow a different milestone scheme, so
+    // callers pass baseRefName ("trunk") to leave those untouched.
+    const pullRequests = await findOpenPullRequestsWithLabel(toolkit, owner, repo, currentLabel, options.baseRefName);
+
+    if (pullRequests.length === 0) {
+        toolkit.core.info(`No open PRs with label "${currentLabel}" found in ${owner}/${repo}.`);
+        return;
+    }
+
+    if (dryRun) {
+        toolkit.core.info(`${pullRequests.length} open PR(s) in ${owner}/${repo} would have "${currentLabel}" moved to "${nextLabel}":`);
+        for (const pr of pullRequests) {
+            toolkit.core.info(`  - #${pr.number} ${pr.title}`);
+        }
+        return;
+    }
+
+    for (const pr of pullRequests) {
+        await toolkit.github.rest.issues.removeLabel({ owner, repo, issue_number: pr.number, name: currentLabel });
+        // addLabels creates the label on the fly if it doesn't exist yet.
+        await toolkit.github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: [nextLabel] });
+        toolkit.core.info(`Moved label on #${pr.number}: "${currentLabel}" -> "${nextLabel}" (${pr.title})`);
+    }
+
+    toolkit.core.info(`Moved "${currentLabel}" to "${nextLabel}" on ${pullRequests.length} PR(s) in ${owner}/${repo}.`);
+}
+
+/**
+ * updateMilestonesOnRelease updates the milestones on release if a PR didn't
+ * get merged in the merge window. It reads the released version from the `TAG`
+ * environment variable (e.g. "v6.7.10.0") and delegates to
+ * {@link moveMilestoneLabelsToNextVersion} for shopware/shopware.
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  */
@@ -72,54 +198,11 @@ export async function updateMilestonesOnRelease(toolkit: Toolkit) {
         toolkit.core.error("Environment variable TAG is missing!");
         return 1;
     }
-    const milestone = process.env.TAG.substring(1);
-    const regex = /^([0-9]+).([0-9]+).([0-9]+).([0-9]+)$/;
-    const regexMatches = regex.exec(milestone);
-    if (regexMatches?.length === undefined || regexMatches?.length < 4) {
+    const version = process.env.TAG.substring(1);
+    if (!VERSION_REGEX.test(version)) {
         toolkit.core.error("Environment variable TAG has a wrong value!");
         return 1;
     }
-    const newMilestone = `${regexMatches[1]}.${regexMatches[2]}.${parseInt(regexMatches[3], 10) + 1}.0`;
-    const res = await toolkit.github.graphql<{
-        repository: {
-            pullRequests: {
-                nodes: [{
-                    title: string,
-                    number: number
-                }]
-            }
-        }
-    }>(`
-      query ($milestone: String!) {
-        repository(owner: "shopware", name: "shopware") {
-          pullRequests(labels: [$milestone], states: OPEN, first: 100) {
-            nodes {
-              title
-              number
-            }
-          }
-        }
-      }`, { milestone: `milestone/${milestone}` });
 
-    for (const pr of res.repository.pullRequests.nodes) {
-        if (isDryRun()) {
-            toolkit.core.info(`Would change milestone of ${pr.number} - ${pr.title}`);
-            continue;
-        }
-        await toolkit.github.rest.issues.removeLabel({
-            owner: "shopware",
-            repo: "shopware",
-            issue_number: pr.number,
-            name: `milestone/${milestone}`
-        });
-
-        await toolkit.github.rest.issues.addLabels({
-            owner: "shopware",
-            repo: "shopware",
-            issue_number: pr.number,
-            labels: [newMilestone],
-        });
-
-        toolkit.core.info(`Changed the milestone from ${milestone} to ${newMilestone} for ${pr.number} - ${pr.title}`);
-    }
+    await moveMilestoneLabelsToNextVersion(toolkit, { version });
 }

@@ -275,3 +275,86 @@ export async function findWithProjectItems(toolkit: Toolkit) {
         throw new Error('only issue and pull_request events are supported');
     }
 }
+
+export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, org: string = "shopware", repo: string = "shopware") {
+    type ClosingPRResponse = {
+        repository: {
+            issue: {
+                timelineItems: {
+                    nodes: Array<{
+                        closer?: {
+                            url: string
+                        }
+                    }>
+                }
+            }
+        }
+    };
+
+    const res: ClosingPRResponse = await toolkit.github.graphql<ClosingPRResponse>(/* GraphQL */`
+        query getClosingPR($owner: String!, $repo: String!, $issueNumber: Int!) {
+          repository(owner:$owner,name:$repo) {
+            issue(number:$issueNumber) {
+              timelineItems(first: 100, itemTypes: [CLOSED_EVENT]) {
+                nodes {
+                    ... on ClosedEvent {
+                    closer {
+                      ... on PullRequest {
+                        url
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+    `, {
+        owner: org,
+        repo,
+        issueNumber
+    });
+
+    if (res.repository.issue.timelineItems.nodes.length == 0) {
+        toolkit.core.warning("No Closed Event of PRs found in timeline");
+        return;
+    }
+
+    if (res.repository.issue.timelineItems.nodes.length > 1) {
+        const prUrls = res.repository.issue.timelineItems.nodes.map(x => x.closer?.url);
+        if (prUrls.length == 0) {
+            toolkit.core.warning("Can' get pr urls from timeline items");
+            return;
+        }
+        const comment = await toolkit.github.rest.issues.createComment({
+            owner: org,
+            repo,
+            issue_number: issueNumber,
+            body: `This issue was solved in a private repository by one of the PRs below, therefore the issue is marked as closed. It will be released in an upcoming version of the affected extension.\n${prUrls.join("\n")}`
+        });
+        if (comment.status != 201) {
+            toolkit.core.error("Failed to create comment");
+            return;
+        }
+
+        toolkit.core.info(`Comment created: ${comment.data.url}`);
+    } else {
+        const prUrl = res.repository.issue.timelineItems.nodes[0].closer?.url;
+        if (!prUrl) {
+            toolkit.core.warning("Can' get pr url from timeline item");
+            return;
+        }
+        const comment = await toolkit.github.rest.issues.createComment({
+            owner: org,
+            repo,
+            issue_number: issueNumber,
+            body: `This issue was solved in a private repository with PR ${prUrl}, therefore the issue is marked as closed. It will be released in an upcoming version of the affected extension.`
+        });
+        if (comment.status != 201) {
+            toolkit.core.error("Failed to create comment");
+            return;
+        }
+
+        toolkit.core.info(`Comment created: ${comment.data.url}`);
+    }
+}

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.15.0](https://github.com/shopware/gh-project-automation/compare/v1.14.2...v1.15.0) (2026-07-01)
+
+
+### Features
+
+* add function to move milestone labels and fix label ([#82](https://github.com/shopware/gh-project-automation/issues/82)) ([a69932b](https://github.com/shopware/gh-project-automation/commit/a69932b4a72c4e96c4a35017e174907221592d30))
+* add linkClosingPR ([#81](https://github.com/shopware/gh-project-automation/issues/81)) ([50cf48e](https://github.com/shopware/gh-project-automation/commit/50cf48e3c06d435943022cb0cad48eff09be472b))
+* add rate-limiting ([#76](https://github.com/shopware/gh-project-automation/issues/76)) ([f20eb74](https://github.com/shopware/gh-project-automation/commit/f20eb74e3ef43bf2916e136233b3169aa6c09359))
+
+
+### Bug Fixes
+
+* branch cleanup ([#74](https://github.com/shopware/gh-project-automation/issues/74)) ([fc78cc3](https://github.com/shopware/gh-project-automation/commit/fc78cc371d8a4486395dd17eb75ecd66fe9f3970))
+
 ## [1.14.2](https://github.com/shopware/gh-project-automation/compare/v1.14.1...v1.14.2) (2026-03-06)
 
 

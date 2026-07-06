@@ -17,7 +17,14 @@ export class SlackClient {
         } catch (error: unknown) {
             if (isWebAPIPlatformError(error)) {
                 if (error.code == ErrorCode.PlatformError) {
-                    toolkit.core.error("Failed to get user: " + error.data.error);
+                    // `users_not_found` just means no Slack account uses this email.
+                    // That is an expected outcome while probing multiple emails, so
+                    // don't surface it as an error annotation.
+                    if (error.data.error === "users_not_found") {
+                        toolkit.core.info(`No Slack user found for email ${email}.`);
+                    } else {
+                        toolkit.core.error("Failed to get user: " + error.data.error);
+                    }
                     toolkit.core.debug(JSON.stringify(error.data));
                 } else {
                     throw error;

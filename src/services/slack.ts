@@ -40,6 +40,8 @@ export async function getSlackUserByEmail(toolkit: Toolkit, emails: string[]): P
 
     const slackClient = new SlackClient(process.env.SLACK_TOKEN);
 
+    toolkit.core.info(`Looking up Slack user for emails: ${JSON.stringify(emails)}`);
+
     for (const email of emails) {
         if (!email || email.trim() === '') {
             continue;
@@ -49,6 +51,8 @@ export async function getSlackUserByEmail(toolkit: Toolkit, emails: string[]): P
         if (!user) {
             continue;
         }
+
+        toolkit.core.info(`Found Slack user ${user.name ?? user.id} for email ${email}.`);
 
         return user;
     }

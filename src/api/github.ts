@@ -683,7 +683,10 @@ export async function getVerifiedDomainEmails(toolkit: Toolkit, login: string, o
             organization
         });
 
-    return res.user.organizationVerifiedDomainEmails;
+    const emails = res.user?.organizationVerifiedDomainEmails ?? [];
+    toolkit.core.info(`Resolved verified domain emails for ${login} in ${organization}: ${JSON.stringify(emails)}`);
+
+    return emails;
 }
 
 /**

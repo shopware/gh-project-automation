@@ -660,28 +660,53 @@ export async function addComment(toolkit: Toolkit, issueId: string, commentBody:
 }
 
 /**
+ * isUserNotFoundError reports whether a GraphQL error was caused by the queried
+ * user not existing (GitHub replies with a `NOT_FOUND` error and `data.user: null`).
+ */
+function isUserNotFoundError(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null || !('errors' in error)) {
+        return false;
+    }
+
+    const errors = (error as { errors?: Array<{ type?: string }> }).errors;
+
+    return Array.isArray(errors) && errors.some(e => e?.type === 'NOT_FOUND');
+}
+
+/**
  * getVerifiedDomainEmails fetches the verified domain emails for a user account associated with an enterprise.
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  * @param login - The login of the user.
  * @param organization - The organization name whose verified domains to consider.
  */
-export async function getVerifiedDomainEmails(toolkit: Toolkit, login: string, organization: string) {
-    const res = await toolkit.github.graphql<{
-        user: {
-            organizationVerifiedDomainEmails: string[]
-        }
-    }>(/* GraphQL */ `
-        query getVerifiedDomainEmails($login: String!, $organization: String!) {
-            user(login: $login) {
-                organizationVerifiedDomainEmails(login: $organization)
+export async function getVerifiedDomainEmails(toolkit: Toolkit, login: string, organization: string): Promise<string[]> {
+    let res: { user: { organizationVerifiedDomainEmails: string[] } | null };
+
+    try {
+        res = await toolkit.github.graphql(/* GraphQL */ `
+            query getVerifiedDomainEmails($login: String!, $organization: String!) {
+                user(login: $login) {
+                    organizationVerifiedDomainEmails(login: $organization)
+                }
             }
+        `,
+            {
+                login,
+                organization
+            });
+    } catch (error: unknown) {
+        // A bot actor (e.g. `shopware-saas[bot]`) is not a GitHub user, so the query
+        // resolves with `data.user: null` and a NOT_FOUND error, which Octokit throws.
+        // Treat that as "no verified emails" so callers can fall back gracefully.
+        if (isUserNotFoundError(error)) {
+            toolkit.core.info(`No GitHub user found for login ${login}; skipping email resolution.`);
+
+            return [];
         }
-    `,
-        {
-            login,
-            organization
-        });
+
+        throw error;
+    }
 
     const emails = res.user?.organizationVerifiedDomainEmails ?? [];
     toolkit.core.info(`Resolved verified domain emails for ${login} in ${organization}: ${JSON.stringify(emails)}`);

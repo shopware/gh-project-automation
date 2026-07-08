@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.1](https://github.com/shopware/gh-project-automation/compare/v1.15.0...v1.15.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* handle bot actors in getVerifiedDomainEmails ([#84](https://github.com/shopware/gh-project-automation/issues/84)) ([0acfe7a](https://github.com/shopware/gh-project-automation/commit/0acfe7ac33e2af46953bbee699b1c024243b4266))
+
 ## [1.15.0](https://github.com/shopware/gh-project-automation/compare/v1.14.2...v1.15.0) (2026-07-01)
 
 

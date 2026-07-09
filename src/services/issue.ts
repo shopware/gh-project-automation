@@ -18,6 +18,7 @@ import {
     getPullRequests,
     jiraHost
 } from "../api";
+import { getOctokit } from "@actions/github";
 
 export const docIssueReference = Buffer.from("doc-issue-created").toString("base64");
 
@@ -276,7 +277,8 @@ export async function findWithProjectItems(toolkit: Toolkit) {
     }
 }
 
-export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, org: string = "shopware", repo: string = "shopware") {
+export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, prReadToken: string, org: string = "shopware", repo: string = "shopware") {
+    const prReadClient = getOctokit(prReadToken);
     type ClosingPRResponse = {
         repository: {
             issue: {
@@ -291,7 +293,7 @@ export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, org: 
         }
     };
 
-    const res: ClosingPRResponse = await toolkit.github.graphql<ClosingPRResponse>(/* GraphQL */`
+    const res: ClosingPRResponse = await prReadClient.graphql<ClosingPRResponse>(/* GraphQL */`
         query getClosingPR($owner: String!, $repo: String!, $issueNumber: Int!) {
           repository(owner:$owner,name:$repo) {
             issue(number:$issueNumber) {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.2](https://github.com/shopware/gh-project-automation/compare/v1.15.1...v1.15.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* use separate pr read client in linkClosingPR ([#86](https://github.com/shopware/gh-project-automation/issues/86)) ([e586848](https://github.com/shopware/gh-project-automation/commit/e5868486f00095fe5b6a9b210da0e02ea30808f8))
+
 ## [1.15.1](https://github.com/shopware/gh-project-automation/compare/v1.15.0...v1.15.1) (2026-07-08)
 
 

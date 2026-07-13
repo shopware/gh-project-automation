@@ -277,7 +277,7 @@ export async function findWithProjectItems(toolkit: Toolkit) {
     }
 }
 
-export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, prReadToken: string, org: string = "shopware", repo: string = "shopware") {
+export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, prReadToken: string, visibilityFilter: string = "PRIVATE", org: string = "shopware", repo: string = "shopware") {
     const prReadClient = getOctokit(prReadToken);
     type ClosingPRResponse = {
         repository: {
@@ -286,6 +286,9 @@ export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, prRea
                     nodes: Array<{
                         closer?: {
                             url: string
+                            repository: {
+                                visibility: string
+                            }
                         }
                     }>
                 }
@@ -303,6 +306,9 @@ export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, prRea
                     closer {
                       ... on PullRequest {
                         url
+                        repository {
+                          visibility
+                        }
                       }
                     }
                   }
@@ -317,13 +323,17 @@ export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, prRea
         issueNumber
     });
 
-    if (res.repository.issue.timelineItems.nodes.length == 0) {
+    const filteredNodes = res.repository.issue.timelineItems.nodes.filter(
+        node => node.closer?.repository?.visibility === visibilityFilter
+    );
+
+    if (filteredNodes.length == 0) {
         toolkit.core.warning("No Closed Event of PRs found in timeline");
         return;
     }
 
-    if (res.repository.issue.timelineItems.nodes.length > 1) {
-        const prUrls = res.repository.issue.timelineItems.nodes.map(x => x.closer?.url);
+    if (filteredNodes.length > 1) {
+        const prUrls = filteredNodes.map(x => x.closer?.url);
         if (prUrls.length == 0) {
             toolkit.core.warning("Can' get pr urls from timeline items");
             return;
@@ -341,7 +351,7 @@ export async function linkClosingPR(toolkit: Toolkit, issueNumber: number, prRea
 
         toolkit.core.info(`Comment created: ${comment.data.url}`);
     } else {
-        const prUrl = res.repository.issue.timelineItems.nodes[0].closer?.url;
+        const prUrl = filteredNodes[0].closer?.url;
         if (!prUrl) {
             toolkit.core.warning("Can' get pr url from timeline item");
             return;

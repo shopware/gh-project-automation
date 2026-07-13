@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.3](https://github.com/shopware/gh-project-automation/compare/v1.15.2...v1.15.3) (2026-07-13)
+
+
+### Bug Fixes
+
+* filter for private repos in linkClosingPR ([#91](https://github.com/shopware/gh-project-automation/issues/91)) ([0d64be4](https://github.com/shopware/gh-project-automation/commit/0d64be444f78a4fac62862528a8cb34493aae98f))
+
 ## [1.15.2](https://github.com/shopware/gh-project-automation/compare/v1.15.1...v1.15.2) (2026-07-09)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.16.0](https://github.com/shopware/gh-project-automation/compare/v1.15.3...v1.16.0) (2026-07-30)
+
+
+### Features
+
+* add denylist for branches, increase error tolerance ([#93](https://github.com/shopware/gh-project-automation/issues/93)) ([d3e4bef](https://github.com/shopware/gh-project-automation/commit/d3e4bef6a733ebf9362717ed0c913fa4b2745885))
+
 ## [1.15.3](https://github.com/shopware/gh-project-automation/compare/v1.15.2...v1.15.3) (2026-07-13)
 
 

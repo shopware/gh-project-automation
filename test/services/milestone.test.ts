@@ -3,14 +3,14 @@ import { moveMilestoneLabelsToNextVersion, updateMilestonesOnRelease } from "../
 import { createMockToolkit } from "../helpers";
 
 /** Builds a mocked toolkit with the issues REST + graphql surface these tests touch. */
-function milestoneToolkit(prs: { number: number, title: string }[], overrides: Record<string, unknown> = {}) {
+function milestoneToolkit(prs: { number: number, title: string, baseRefName?: string }[], overrides: Record<string, unknown> = {}) {
     const toolkit = createMockToolkit();
 
     toolkit.github.graphql = vi.fn().mockResolvedValue({
         repository: {
             pullRequests: {
                 pageInfo: { hasNextPage: false, endCursor: null },
-                nodes: prs,
+                nodes: prs.map(pr => ({ baseRefName: "trunk", ...pr })),
             },
         },
     });
@@ -45,14 +45,13 @@ describe("moveMilestoneLabelsToNextVersion", () => {
             { number: 2, title: "b" },
         ]);
 
-        await moveMilestoneLabelsToNextVersion(toolkit, { version: "6.7.10.0", baseRefName: "trunk" });
+        await moveMilestoneLabelsToNextVersion(toolkit, { version: "6.7.10.0" });
 
-        // The GraphQL query is scoped to the current label, repo and base branch.
+        // The GraphQL query is scoped to the current label and repo.
         expect(toolkit.github.graphql).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
             owner: "shopware",
             repo: "shopware",
             label: "milestone/6.7.10.0",
-            baseRefName: "trunk",
         }));
 
         expect(toolkit.github.rest.issues.removeLabel).toHaveBeenCalledTimes(2);
@@ -61,6 +60,69 @@ describe("moveMilestoneLabelsToNextVersion", () => {
             issue_number: 1,
             labels: ["milestone/6.7.11.0"],
         }));
+    });
+
+    it("relabels stacked PRs that target another PR's head branch", async () => {
+        // Regression: these were skipped while an allowlist of "trunk" was used, so
+        // they merged into trunk carrying an obsolete milestone label once GitHub
+        // retargeted them.
+        const toolkit = milestoneToolkit([
+            { number: 17997, title: "add MCP session toolsets", baseRefName: "feat/mcp-list-changed-notifications" },
+        ]);
+
+        await moveMilestoneLabelsToNextVersion(toolkit, { version: "6.7.13.0" });
+
+        expect(toolkit.github.rest.issues.addLabels).toHaveBeenCalledWith(expect.objectContaining({
+            issue_number: 17997,
+            labels: ["milestone/6.7.14.0"],
+        }));
+    });
+
+    it.each([
+        "6.7.13.x",
+        "6.6.x",
+        "saas/2025/12",
+    ])("leaves PRs targeting the release branch %s alone", async (baseRefName) => {
+        const toolkit = milestoneToolkit([{ number: 1, title: "a", baseRefName }]);
+
+        await moveMilestoneLabelsToNextVersion(toolkit, { version: "6.7.10.0" });
+
+        expect(toolkit.github.rest.issues.removeLabel).not.toHaveBeenCalled();
+        expect(toolkit.github.rest.issues.addLabels).not.toHaveBeenCalled();
+    });
+
+    it("processes the remaining PRs when one fails, then throws listing the failures", async () => {
+        // Regression: a permission error on the first PR used to abort the whole run.
+        const toolkit = milestoneToolkit([
+            { number: 1, title: "a" },
+            { number: 2, title: "b" },
+            { number: 3, title: "c" },
+        ], {
+            removeLabel: vi.fn().mockImplementation(({ issue_number }: { issue_number: number }) => {
+                if (issue_number === 1) {
+                    return Promise.reject(Object.assign(new Error("Resource not accessible by integration"), { status: 403 }));
+                }
+                return Promise.resolve({});
+            }),
+            addLabels: vi.fn().mockResolvedValue({}),
+        });
+
+        await expect(moveMilestoneLabelsToNextVersion(toolkit, { version: "6.7.10.0" })).rejects.toThrow("#1");
+
+        expect(toolkit.github.rest.issues.addLabels).toHaveBeenCalledTimes(2);
+        expect(toolkit.core.error).toHaveBeenCalledWith(expect.stringContaining("#1"));
+    });
+
+    it("does not add the next label when the current one vanished in the meantime", async () => {
+        // A 404 means someone deliberately changed the milestone after the query.
+        const toolkit = milestoneToolkit([{ number: 1, title: "a" }], {
+            removeLabel: vi.fn().mockRejectedValue(Object.assign(new Error("Label does not exist"), { status: 404 })),
+            addLabels: vi.fn().mockResolvedValue({}),
+        });
+
+        await moveMilestoneLabelsToNextVersion(toolkit, { version: "6.7.10.0" });
+
+        expect(toolkit.github.rest.issues.addLabels).not.toHaveBeenCalled();
     });
 
     it("does not mutate anything in dry-run mode", async () => {

@@ -1,4 +1,5 @@
 import { GitHubComment, GitHubIssue, GitHubMilestone, Label, Toolkit } from "../types";
+import { PullRequestActivity } from "../util/activity";
 
 export async function closeIssue(toolkit: Toolkit, issueId: string, reason: string = "NOT_PLANNED") {
     const res = await toolkit.github.graphql(/* GraphQL */ `
@@ -500,72 +501,76 @@ export async function getCommentsForIssue(toolkit: Toolkit, issueId: string, cur
 }
 
 /**
- * Gets pull requests matching the given search criteria
+ * Gets pull requests matching the given search criteria.
+ *
+ * Pages through the whole result set; the search API caps that at 1000 matches.
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  * @param searchQuery - The GitHub search query to use
+ * @param withActivity - Also fetch the timeline and review threads `lastHumanActivityAt` reads. Off by default because it multiplies the cost of every page.
  */
-export async function getPullRequests(toolkit: Toolkit, searchQuery: string) {
-    const pullRequests = await toolkit.github.graphql<
-        {
+export async function getPullRequests(toolkit: Toolkit, searchQuery: string, withActivity: boolean = false) {
+    type PullRequestNode = {
+        id: string,
+        title: string,
+        number: number,
+        url: string,
+        author: {
+            login: string
+        } | null,
+        repository: {
+            owner: {
+                login: string
+            },
+            name: string
+        },
+        assignees: {
+            nodes: [{
+                login: string
+            }]
+        },
+        reviewRequests: {
+            nodes: [{
+                requestedReviewer: {
+                    login?: string,
+                    name?: string
+                }
+            }]
+        },
+        closingIssuesReferences: {
+            nodes: [{
+                id: string,
+                title: string,
+                number: number,
+                url: string,
+                repository: {
+                    owner: {
+                        login: string
+                    },
+                    name: string
+                }
+            }]
+        }
+    } & PullRequestActivity;
+
+    const pullRequests: PullRequestNode[] = [];
+    let after: string | undefined = undefined;
+
+    do {
+        const page: {
             search: {
                 pageInfo: {
-                    startCursor: string,
-                    endCursor: string,
-                    hasPreviousPage: boolean,
-                    hasNextPage: boolean
+                    hasNextPage: boolean,
+                    endCursor: string | null
                 },
-                nodes: [
-                    {
-                        id: string,
-                        title: string,
-                        number: number,
-                        url: string,
-                        repository: {
-                            owner: {
-                                login: string
-                            },
-                            name: string
-                        },
-                        assignees: {
-                            nodes: [{
-                                login: string
-                            }]
-                        },
-                        reviewRequests: {
-                            nodes: [{
-                                requestedReviewer: {
-                                    login?: string,
-                                    name?: string
-                                }
-                            }]
-                        },
-                        closingIssuesReferences: {
-                            nodes: [{
-                                id: string,
-                                title: string,
-                                number: number,
-                                url: string,
-                                repository: {
-                                    owner: {
-                                        login: string
-                                    },
-                                    name: string
-                                }
-                            }]
-                        }
-                    }
-                ]
+                nodes: PullRequestNode[]
             }
-        }
-    >(/* GraphQL */ `
-        query findPullRequests($searchQuery: String!) {
-            search(query: $searchQuery, type: ISSUE, first: 50) {
+        } = await toolkit.github.graphql(/* GraphQL */ `
+        query findPullRequests($searchQuery: String!, $after: String, $withActivity: Boolean!) {
+            search(query: $searchQuery, type: ISSUE, first: 50, after: $after) {
                 pageInfo {
-                    startCursor
-                    endCursor
-                    hasPreviousPage
                     hasNextPage
+                    endCursor
                 }
                 nodes {
                     ... on PullRequest {
@@ -573,6 +578,9 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string) {
                         title
                         number
                         url
+                        author {
+                            login
+                        }
                         repository {
                             owner {
                                 login
@@ -610,13 +618,60 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string) {
                                 }
                             }
                         }
+                        reviewThreads(last: 50) @include(if: $withActivity) {
+                            nodes {
+                                comments(last: 3) {
+                                    nodes {
+                                        createdAt
+                                        author {
+                                            login
+                                            __typename
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        timelineItems(last: 40, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW, PULL_REQUEST_COMMIT]) @include(if: $withActivity) {
+                            nodes {
+                                ... on IssueComment {
+                                    createdAt
+                                    author {
+                                        login
+                                        __typename
+                                    }
+                                }
+                                ... on PullRequestReview {
+                                    submittedAt
+                                    author {
+                                        login
+                                        __typename
+                                    }
+                                }
+                                ... on PullRequestCommit {
+                                    commit {
+                                        committedDate
+                                        author {
+                                            user {
+                                                login
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }`,
-        {
-            searchQuery
-        }).then(res => res.search.nodes);
+            {
+                searchQuery,
+                after,
+                withActivity
+            });
+
+        pullRequests.push(...page.search.nodes);
+        after = page.search.pageInfo.hasNextPage ? page.search.pageInfo.endCursor ?? undefined : undefined;
+    } while (after);
 
     return pullRequests;
 }

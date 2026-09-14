@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { closeCompletedMilestones, ensureReleaseMilestone, moveMilestoneLabelsToNextVersion, updateMilestonesOnRelease } from "../../src/services/milestone";
+import { closeCompletedMilestones, ensureReleaseMilestone, moveMilestoneLabelsToNextVersion, scheduleReleaseMilestone, updateMilestonesOnRelease } from "../../src/services/milestone";
 import { createMockToolkit } from "../helpers";
 
 /** Builds a mocked toolkit with the issues REST + graphql surface these tests touch. */
@@ -474,5 +474,91 @@ describe("ensureReleaseMilestone", () => {
         const toolkit = scheduleToolkit();
 
         await expect(ensureReleaseMilestone(toolkit, { ...schedule, version: "6.8" })).rejects.toThrow("6.8");
+    });
+});
+
+describe("scheduleReleaseMilestone", () => {
+    /** `releases` are tag/date pairs as the releases endpoint returns them, newest first. */
+    function releaseToolkit(releases: [string, string][], existing?: Record<string, unknown>) {
+        const toolkit = createMockToolkit();
+
+        toolkit.github.paginate = vi.fn().mockResolvedValue(existing ? [existing] : []);
+        toolkit.github.rest.repos = {
+            listReleases: vi.fn().mockResolvedValue({
+                data: releases.map(([tag_name, published_at]) => ({ tag_name, published_at, draft: false, prerelease: false })),
+            }),
+        };
+        toolkit.github.rest.issues = {
+            listMilestones: vi.fn(),
+            createMilestone: vi.fn().mockResolvedValue({ data: {} }),
+            updateMilestone: vi.fn().mockResolvedValue({}),
+        };
+
+        return toolkit;
+    }
+
+    const RELEASES: [string, string][] = [
+        ["v6.6.10.24", "2026-09-10T06:49:15Z"],
+        ["v6.7.14.0", "2026-09-09T07:06:52Z"],
+        ["v6.7.13.1", "2026-08-25T14:27:35Z"],
+        ["v6.7.13.0", "2026-08-05T09:29:37Z"],
+    ];
+
+    it("dates the next minor from the last released one", async () => {
+        const toolkit = releaseToolkit(RELEASES);
+
+        await scheduleReleaseMilestone(toolkit, { version: "6.7.15.0", dryRun: false });
+
+        expect(toolkit.github.rest.issues.createMilestone).toHaveBeenCalledWith(expect.objectContaining({
+            title: "6.7.15.0",
+            due_on: "2026-10-05T00:00:00Z",
+        }));
+    });
+
+    it("ignores the LTS line when picking the anchor", async () => {
+        // v6.6.10.24 is the newest release of all, but belongs to another line.
+        const toolkit = releaseToolkit(RELEASES);
+
+        await scheduleReleaseMilestone(toolkit, { version: "6.7.15.0", dryRun: false });
+
+        // Anchored on 6.6.10.24 the result would have been November.
+        expect(toolkit.github.rest.issues.createMilestone).toHaveBeenCalledWith(expect.objectContaining({
+            due_on: "2026-10-05T00:00:00Z",
+        }));
+    });
+
+    it("skips the minor that is already branched off", async () => {
+        // Before 6.7.14.0 shipped: the anchor is 6.7.13.0 and 6.7.15.0 is two cycles out.
+        const toolkit = releaseToolkit(RELEASES.filter(([tag]) => tag !== "v6.7.14.0"));
+
+        await scheduleReleaseMilestone(toolkit, { version: "6.7.15.0", dryRun: false });
+
+        expect(toolkit.github.rest.issues.createMilestone).toHaveBeenCalledWith(expect.objectContaining({
+            due_on: "2026-10-05T00:00:00Z",
+        }));
+    });
+
+    it("refuses to date a patch release", async () => {
+        const toolkit = releaseToolkit(RELEASES);
+
+        await expect(scheduleReleaseMilestone(toolkit, { version: "6.7.15.1" })).rejects.toThrow("patch release");
+    });
+
+    it("does nothing when the version is not ahead of the last release", async () => {
+        const toolkit = releaseToolkit(RELEASES);
+
+        await scheduleReleaseMilestone(toolkit, { version: "6.7.14.0", dryRun: false });
+
+        expect(toolkit.github.rest.issues.createMilestone).not.toHaveBeenCalled();
+        expect(toolkit.github.rest.issues.updateMilestone).not.toHaveBeenCalled();
+    });
+
+    it("warns instead of guessing when the line has no release yet", async () => {
+        const toolkit = releaseToolkit([["v6.6.10.24", "2026-09-10T06:49:15Z"]]);
+
+        await scheduleReleaseMilestone(toolkit, { version: "6.8.1.0", dryRun: false });
+
+        expect(toolkit.core.warning).toHaveBeenCalledWith(expect.stringContaining("6.8"));
+        expect(toolkit.github.rest.issues.createMilestone).not.toHaveBeenCalled();
     });
 });

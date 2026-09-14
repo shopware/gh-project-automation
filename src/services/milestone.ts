@@ -1,6 +1,7 @@
 import { getMilestoneByTitle } from "../api";
 import { Toolkit } from "../types";
 import { isDryRun } from "../util/dry_run";
+import { scheduleForMinor } from "./release_schedule";
 import { getDevelopmentIssueForPullRequest } from "./issue";
 
 /**
@@ -496,4 +497,97 @@ export async function ensureReleaseMilestone(toolkit: Toolkit, options: EnsureRe
 
     await toolkit.github.rest.issues.updateMilestone({ owner, repo, milestone_number: existing.number, ...update });
     toolkit.core.info(`Filled in ${Object.keys(update).join(" and ")} on milestone "${options.version}".`);
+}
+
+export type ScheduleReleaseMilestoneOptions = {
+    /** The version to schedule, e.g. "6.7.15.0". */
+    version: string;
+    /** Repository owner. Defaults to "shopware". */
+    owner?: string;
+    /** Repository name. Defaults to "shopware". */
+    repo?: string;
+    /** Overrides the DRY_RUN env detection when provided. */
+    dryRun?: boolean;
+};
+
+/**
+ * The most recently released minor of a release line, e.g. `6.7.14.0` for line
+ * `6.7`. Only the first page of releases is read: minors ship monthly, so the
+ * newest one is always far inside the 100 most recent releases.
+ */
+async function lastReleasedMinor(toolkit: Toolkit, owner: string, repo: string, line: string): Promise<{ patch: number, releasedAt: Date } | undefined> {
+    const { data } = await toolkit.github.rest.repos.listReleases({ owner, repo, per_page: 100 });
+    const minorTag = new RegExp(`^v${line.replace(/\./g, "\\.")}\\.(\\d+)\\.0$`);
+
+    let newest: { patch: number, releasedAt: Date } | undefined;
+
+    for (const release of data) {
+        if (release.draft || release.prerelease || !release.published_at) {
+            continue;
+        }
+
+        const patch = minorTag.exec(release.tag_name)?.[1];
+        if (patch === undefined) {
+            continue;
+        }
+
+        const candidate = { patch: parseInt(patch, 10), releasedAt: new Date(release.published_at) };
+        if (!newest || candidate.patch > newest.patch) {
+            newest = candidate;
+        }
+    }
+
+    return newest;
+}
+
+/**
+ * scheduleReleaseMilestone gives the milestone of an upcoming minor its planned
+ * dates, creating the milestone if no PR has been labelled for it yet.
+ *
+ * The dates are derived from the last released minor of the same line rather than
+ * from today, so this is correct whenever it runs. Between a branch-off and the
+ * release that follows it, two minors are in flight and the calendar alone cannot
+ * say which one a date belongs to.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param options - see {@link ScheduleReleaseMilestoneOptions}
+ */
+export async function scheduleReleaseMilestone(toolkit: Toolkit, options: ScheduleReleaseMilestoneOptions): Promise<void> {
+    const owner = options.owner ?? "shopware";
+    const repo = options.repo ?? "shopware";
+
+    const matches = VERSION_REGEX.exec(options.version);
+    if (!matches) {
+        throw new Error(`"${options.version}" is not a valid version (expected e.g. "6.7.15.0").`);
+    }
+    if (matches[4] !== "0") {
+        throw new Error(`"${options.version}" is a patch release. Patch releases are not planned ahead and get no date.`);
+    }
+
+    const line = `${matches[1]}.${matches[2]}`;
+    const anchor = await lastReleasedMinor(toolkit, owner, repo, line);
+
+    if (!anchor) {
+        toolkit.core.warning(`No released minor found for line ${line} in ${owner}/${repo}, cannot derive a date for "${options.version}".`);
+        return;
+    }
+
+    const monthsAhead = parseInt(matches[3], 10) - anchor.patch;
+    if (monthsAhead < 1) {
+        toolkit.core.info(`"${options.version}" is not ahead of the last released minor ${line}.${anchor.patch}.0, nothing to schedule.`);
+        return;
+    }
+
+    const schedule = scheduleForMinor(anchor.releasedAt, monthsAhead);
+    toolkit.core.info(`Scheduling "${options.version}", ${monthsAhead} cycle(s) after ${line}.${anchor.patch}.0: release ${schedule.releaseDateIso}, branch-off ${schedule.branchoffDateIso}.`);
+
+    await ensureReleaseMilestone(toolkit, {
+        version: options.version,
+        dueOn: schedule.releaseDateIso,
+        releaseDate: schedule.releaseDate,
+        branchOffDate: schedule.branchoffDate,
+        owner,
+        repo,
+        dryRun: options.dryRun,
+    });
 }

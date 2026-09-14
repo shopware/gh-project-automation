@@ -190,6 +190,24 @@ export async function moveMilestoneLabelsToNextVersion(toolkit: Toolkit, options
         return;
     }
 
+    await applyLabelMove(toolkit, { owner, repo, currentLabel, nextLabel, pullRequests, dryRun });
+}
+
+type LabelMove = {
+    owner: string;
+    repo: string;
+    currentLabel: string;
+    nextLabel: string;
+    pullRequests: PullRequestRef[];
+    dryRun: boolean;
+};
+
+/**
+ * Moves one milestone label to another on the given pull requests. Every PR is
+ * attempted independently; if some fail, the rest are still processed and this
+ * throws once at the end listing the failures.
+ */
+async function applyLabelMove(toolkit: Toolkit, { owner, repo, currentLabel, nextLabel, pullRequests, dryRun }: LabelMove): Promise<void> {
     if (dryRun) {
         toolkit.core.info(`${pullRequests.length} open PR(s) in ${owner}/${repo} would have "${currentLabel}" moved to "${nextLabel}":`);
         for (const pr of pullRequests) {
@@ -246,6 +264,100 @@ function isNotFound(error: unknown): boolean {
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * The permanent maintenance branch of a version's line, e.g. "6.6.x" for
+ * "6.6.10.25". Whether that branch exists is what separates a maintained LTS line
+ * from the current one: 6.6.x and 6.5.x exist, 6.7.x never will, because the
+ * current major is developed on the default branch and cut into 6.7.N.x branches.
+ */
+function maintenanceBranchOf(version: string): string | undefined {
+    const matches = VERSION_REGEX.exec(version);
+
+    return matches ? `${matches[1]}.${matches[2]}.x` : undefined;
+}
+
+/**
+ * bumpHotfixVersion returns the next version by incrementing the fourth segment,
+ * e.g. "6.6.10.25" -> "6.6.10.26". A maintenance line counts there; only the
+ * current line opens a new minor for every release.
+ */
+function bumpHotfixVersion(version: string): string | undefined {
+    const matches = VERSION_REGEX.exec(version);
+    if (!matches) {
+        return undefined;
+    }
+
+    return `${matches[1]}.${matches[2]}.${matches[3]}.${parseInt(matches[4], 10) + 1}`;
+}
+
+async function branchExists(toolkit: Toolkit, owner: string, repo: string, branch: string): Promise<boolean> {
+    try {
+        await toolkit.github.rest.repos.getBranch({ owner, repo, branch });
+        return true;
+    } catch (error) {
+        if (isNotFound(error)) {
+            return false;
+        }
+        throw error;
+    }
+}
+
+export type MoveLtsMilestoneLabelsOptions = {
+    /** The released maintenance version, e.g. "6.6.10.25". */
+    version: string;
+    /** Repository owner. Defaults to "shopware". */
+    owner?: string;
+    /** Repository name. Defaults to "shopware". */
+    repo?: string;
+    /** Overrides the DRY_RUN env detection when provided. */
+    dryRun?: boolean;
+};
+
+/**
+ * moveLtsMilestoneLabels moves `milestone/<version>` to the next hotfix version on
+ * every open PR targeting the maintenance branch of that line.
+ *
+ * A maintenance line has no branch-off: the branch is permanent and a release is
+ * the only event that closes a milestone, so this is the LTS counterpart of
+ * {@link moveMilestoneLabelsToNextVersion}, which bumps the minor instead and
+ * deliberately skips these PRs.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param options - see {@link MoveLtsMilestoneLabelsOptions}
+ */
+export async function moveLtsMilestoneLabels(toolkit: Toolkit, options: MoveLtsMilestoneLabelsOptions): Promise<void> {
+    const owner = options.owner ?? "shopware";
+    const repo = options.repo ?? "shopware";
+    const dryRun = options.dryRun ?? isDryRun();
+
+    const nextVersion = bumpHotfixVersion(options.version);
+    const branch = maintenanceBranchOf(options.version);
+    if (!nextVersion || !branch) {
+        throw new Error(`"${options.version}" is not a valid version (expected e.g. "6.6.10.25").`);
+    }
+
+    const currentLabel = `milestone/${options.version}`;
+    const nextLabel = `milestone/${nextVersion}`;
+
+    if (dryRun) {
+        toolkit.core.info("Running in DRY RUN mode - no labels will be created or changed.");
+    }
+
+    const candidates = await findOpenPullRequestsWithLabel(toolkit, owner, repo, currentLabel);
+    const pullRequests = candidates.filter(pr => pr.baseRefName === branch);
+
+    for (const pr of candidates.filter(pr => pr.baseRefName !== branch)) {
+        toolkit.core.info(`Skipping #${pr.number}: targets "${pr.baseRefName}", not the maintenance branch "${branch}" (${pr.title})`);
+    }
+
+    if (pullRequests.length === 0) {
+        toolkit.core.info(`No open PRs against "${branch}" carry "${currentLabel}" in ${owner}/${repo}.`);
+        return;
+    }
+
+    await applyLabelMove(toolkit, { owner, repo, currentLabel, nextLabel, pullRequests, dryRun });
 }
 
 export type CloseCompletedMilestonesOptions = {
@@ -392,9 +504,18 @@ export async function updateMilestonesOnRelease(toolkit: Toolkit) {
         return 1;
     }
 
+    // A maintenance line counts in the fourth segment and has no branch-off, so the
+    // trunk rule would bump it to a minor that will never be released.
+    const maintenanceBranch = maintenanceBranchOf(version);
+    const isMaintenanceLine = maintenanceBranch !== undefined && await branchExists(toolkit, "shopware", "shopware", maintenanceBranch);
+
     let moveError: unknown;
     try {
-        await moveMilestoneLabelsToNextVersion(toolkit, { version });
+        if (isMaintenanceLine) {
+            await moveLtsMilestoneLabels(toolkit, { version });
+        } else {
+            await moveMilestoneLabelsToNextVersion(toolkit, { version });
+        }
     } catch (error) {
         moveError = error;
     }

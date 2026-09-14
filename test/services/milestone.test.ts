@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { closeCompletedMilestones, ensureReleaseMilestone, moveMilestoneLabelsToNextVersion, scheduleReleaseMilestone, updateMilestonesOnRelease } from "../../src/services/milestone";
+import { closeCompletedMilestones, ensureReleaseMilestone, moveLtsMilestoneLabels, moveMilestoneLabelsToNextVersion, scheduleReleaseMilestone, updateMilestonesOnRelease } from "../../src/services/milestone";
 import { createMockToolkit } from "../helpers";
 
 /** Builds a mocked toolkit with the issues REST + graphql surface these tests touch. */
@@ -27,6 +27,8 @@ function milestoneToolkit(prs: { number: number, title: string, baseRefName?: st
     // milestone list to walk that step is a no-op.
     toolkit.github.paginate = vi.fn().mockResolvedValue([]);
     toolkit.github.rest.git = { getRef: vi.fn().mockResolvedValue({}) };
+    // No maintenance branch, so the released version is on the current line.
+    toolkit.github.rest.repos = { getBranch: vi.fn().mockRejectedValue(Object.assign(new Error("Not Found"), { status: 404 })) };
 
     return toolkit;
 }
@@ -560,5 +562,103 @@ describe("scheduleReleaseMilestone", () => {
 
         expect(toolkit.core.warning).toHaveBeenCalledWith(expect.stringContaining("6.8"));
         expect(toolkit.github.rest.issues.createMilestone).not.toHaveBeenCalled();
+    });
+});
+
+describe("moveLtsMilestoneLabels", () => {
+    const originalDryRun = process.env.DRY_RUN;
+
+    beforeEach(() => {
+        delete process.env.DRY_RUN;
+    });
+
+    afterEach(() => {
+        if (originalDryRun === undefined) {
+            delete process.env.DRY_RUN;
+        } else {
+            process.env.DRY_RUN = originalDryRun;
+        }
+    });
+
+    it("counts in the fourth segment, not the third", async () => {
+        const toolkit = milestoneToolkit([{ number: 1, title: "a", baseRefName: "6.6.x" }]);
+
+        await moveLtsMilestoneLabels(toolkit, { version: "6.6.10.25" });
+
+        expect(toolkit.github.graphql).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+            label: "milestone/6.6.10.25",
+        }));
+        expect(toolkit.github.rest.issues.addLabels).toHaveBeenCalledWith(expect.objectContaining({
+            issue_number: 1,
+            labels: ["milestone/6.6.10.26"],
+        }));
+    });
+
+    it("leaves PRs alone that do not target the maintenance branch", async () => {
+        const toolkit = milestoneToolkit([
+            { number: 1, title: "on the line", baseRefName: "6.6.x" },
+            { number: 2, title: "a backport branch", baseRefName: "fix/something-backport-6.6.x" },
+            { number: 3, title: "trunk", baseRefName: "trunk" },
+        ]);
+
+        await moveLtsMilestoneLabels(toolkit, { version: "6.6.10.25" });
+
+        expect(toolkit.github.rest.issues.addLabels).toHaveBeenCalledTimes(1);
+        expect(toolkit.github.rest.issues.addLabels).toHaveBeenCalledWith(expect.objectContaining({ issue_number: 1 }));
+    });
+
+    it("changes nothing in dry run mode", async () => {
+        process.env.DRY_RUN = "true";
+        const toolkit = milestoneToolkit([{ number: 1, title: "a", baseRefName: "6.6.x" }]);
+
+        await moveLtsMilestoneLabels(toolkit, { version: "6.6.10.25" });
+
+        expect(toolkit.github.rest.issues.removeLabel).not.toHaveBeenCalled();
+        expect(toolkit.github.rest.issues.addLabels).not.toHaveBeenCalled();
+    });
+
+    it("rejects a malformed version", async () => {
+        const toolkit = milestoneToolkit([]);
+
+        await expect(moveLtsMilestoneLabels(toolkit, { version: "6.6.x" })).rejects.toThrow("not a valid version");
+    });
+});
+
+describe("updateMilestonesOnRelease on a maintenance line", () => {
+    const originalTag = process.env.TAG;
+    const originalDryRun = process.env.DRY_RUN;
+
+    beforeEach(() => {
+        delete process.env.DRY_RUN;
+    });
+
+    afterEach(() => {
+        if (originalTag === undefined) delete process.env.TAG; else process.env.TAG = originalTag;
+        if (originalDryRun === undefined) delete process.env.DRY_RUN; else process.env.DRY_RUN = originalDryRun;
+    });
+
+    it("bumps the hotfix segment when the maintenance branch exists", async () => {
+        process.env.TAG = "v6.6.10.25";
+        const toolkit = milestoneToolkit([{ number: 5, title: "c", baseRefName: "6.6.x" }]);
+        toolkit.github.rest.repos.getBranch = vi.fn().mockResolvedValue({});
+
+        await updateMilestonesOnRelease(toolkit);
+
+        expect(toolkit.github.rest.repos.getBranch).toHaveBeenCalledWith(expect.objectContaining({ branch: "6.6.x" }));
+        expect(toolkit.github.rest.issues.addLabels).toHaveBeenCalledWith(expect.objectContaining({
+            issue_number: 5,
+            labels: ["milestone/6.6.10.26"],
+        }));
+    });
+
+    it("keeps bumping the minor when there is no maintenance branch", async () => {
+        process.env.TAG = "v6.7.10.0";
+        const toolkit = milestoneToolkit([{ number: 5, title: "c" }]);
+
+        await updateMilestonesOnRelease(toolkit);
+
+        expect(toolkit.github.rest.issues.addLabels).toHaveBeenCalledWith(expect.objectContaining({
+            labels: ["milestone/6.7.11.0"],
+        }));
     });
 });

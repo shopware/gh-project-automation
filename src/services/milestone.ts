@@ -247,11 +247,136 @@ function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
+export type CloseCompletedMilestonesOptions = {
+    /** Repository owner. Defaults to "shopware". */
+    owner?: string;
+    /** Repository name. Defaults to "shopware". */
+    repo?: string;
+    /** Overrides the DRY_RUN env detection when provided. */
+    dryRun?: boolean;
+};
+
 /**
- * updateMilestonesOnRelease updates the milestones on release if a PR didn't
- * get merged in the merge window. It reads the released version from the `TAG`
- * environment variable (e.g. "v6.7.10.0") and delegates to
- * {@link moveMilestoneLabelsToNextVersion} for shopware/shopware.
+ * hasReleaseTag reports whether the repository carries a `v<version>` tag, i.e.
+ * whether that version was actually released.
+ *
+ * Each candidate is looked up individually instead of listing every tag: the
+ * platform repository has well over a thousand tags, and only a handful of
+ * milestones are ever open at the same time.
+ */
+async function hasReleaseTag(toolkit: Toolkit, owner: string, repo: string, version: string): Promise<boolean> {
+    try {
+        await toolkit.github.rest.git.getRef({ owner, repo, ref: `tags/v${version}` });
+        return true;
+    } catch (error) {
+        if (isNotFound(error)) {
+            return false;
+        }
+        throw error;
+    }
+}
+
+/**
+ * closeCompletedMilestones closes every open milestone that has already
+ * shipped. A milestone qualifies when all three hold:
+ *
+ * 1. its title is a full four-segment version (so the "6.8"/"6.9" umbrella
+ *    milestones for major releases are never touched),
+ * 2. it has no open issues left, and
+ * 3. a matching `v<version>` tag exists, proving the version was released.
+ *
+ * Without (3) a milestone that is merely empty — created early for an upcoming
+ * patch — would be closed before anything shipped. Without (2) a PR that missed
+ * the merge window would be left hanging on a closed milestone: its label is
+ * moved by {@link moveMilestoneLabelsToNextVersion}, but the milestone itself is
+ * reassigned by a separate workflow reacting to that label change, which may not
+ * have run yet. Such a milestone simply stays open and is closed by the next
+ * release run.
+ *
+ * Every milestone is attempted independently. If some fail, the rest are still
+ * processed and the function throws once at the end listing the failures.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param options - see {@link CloseCompletedMilestonesOptions}
+ */
+export async function closeCompletedMilestones(toolkit: Toolkit, options: CloseCompletedMilestonesOptions = {}): Promise<void> {
+    const owner = options.owner ?? "shopware";
+    const repo = options.repo ?? "shopware";
+    const dryRun = options.dryRun ?? isDryRun();
+
+    if (dryRun) {
+        toolkit.core.info("Running in DRY RUN mode - no milestones will be closed.");
+    }
+
+    const milestones: { number: number, title: string, open_issues: number }[] = await toolkit.github.paginate(
+        toolkit.github.rest.issues.listMilestones,
+        { owner, repo, state: "open", per_page: 100 },
+    );
+
+    const completed: typeof milestones = [];
+
+    for (const milestone of milestones) {
+        if (!VERSION_REGEX.test(milestone.title)) {
+            continue;
+        }
+        if (milestone.open_issues > 0) {
+            toolkit.core.info(`Keeping "${milestone.title}" open: ${milestone.open_issues} open issue(s) left.`);
+            continue;
+        }
+        if (!await hasReleaseTag(toolkit, owner, repo, milestone.title)) {
+            toolkit.core.info(`Keeping "${milestone.title}" open: no "v${milestone.title}" tag, so it has not been released yet.`);
+            continue;
+        }
+        completed.push(milestone);
+    }
+
+    if (completed.length === 0) {
+        toolkit.core.info(`No released milestones to close in ${owner}/${repo}.`);
+        return;
+    }
+
+    if (dryRun) {
+        toolkit.core.info(`${completed.length} milestone(s) in ${owner}/${repo} would be closed:`);
+        for (const milestone of completed) {
+            toolkit.core.info(`  - ${milestone.title}`);
+        }
+        return;
+    }
+
+    /** Milestones that could not be closed, collected so one failure can't hide the rest. */
+    const failed: string[] = [];
+
+    for (const milestone of completed) {
+        try {
+            await toolkit.github.rest.issues.updateMilestone({
+                owner,
+                repo,
+                milestone_number: milestone.number,
+                state: "closed",
+            });
+            toolkit.core.info(`Closed milestone "${milestone.title}".`);
+        } catch (error) {
+            failed.push(milestone.title);
+            toolkit.core.error(`Failed to close milestone "${milestone.title}": ${errorMessage(error)}`);
+        }
+    }
+
+    toolkit.core.info(`Closed ${completed.length - failed.length} of ${completed.length} released milestone(s) in ${owner}/${repo}.`);
+
+    if (failed.length > 0) {
+        throw new Error(`Failed to close ${failed.length} milestone(s) in ${owner}/${repo}: ${failed.join(", ")}`);
+    }
+}
+
+/**
+ * updateMilestonesOnRelease updates the milestones on release: it moves the
+ * label of any PR that didn't get merged in the merge window to the next
+ * version, and closes the milestones of versions that have shipped. It reads
+ * the released version from the `TAG` environment variable (e.g. "v6.7.10.0")
+ * and operates on shopware/shopware.
+ *
+ * Both steps run even if the other fails, so a single unlabelable PR cannot
+ * leave the milestone open for good.
  *
  * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
  */
@@ -266,5 +391,16 @@ export async function updateMilestonesOnRelease(toolkit: Toolkit) {
         return 1;
     }
 
-    await moveMilestoneLabelsToNextVersion(toolkit, { version });
+    let moveError: unknown;
+    try {
+        await moveMilestoneLabelsToNextVersion(toolkit, { version });
+    } catch (error) {
+        moveError = error;
+    }
+
+    await closeCompletedMilestones(toolkit);
+
+    if (moveError) {
+        throw moveError;
+    }
 }

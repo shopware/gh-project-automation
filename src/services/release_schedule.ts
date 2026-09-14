@@ -9,8 +9,12 @@ export type ReleaseSchedule = {
     announcementDate: string;
     /** Human-readable on-prem release date, e.g. `Monday, July 7, 2025`. */
     onpremReleaseDate: string;
+    /** The same on-prem release date as `YYYY-MM-DD`, for APIs that want a date. */
+    onpremReleaseDateIso: string;
     /** Human-readable branch-off date, e.g. `Monday, June 23, 2025`. */
     branchoffDate: string;
+    /** The same branch-off date as `YYYY-MM-DD`. */
+    branchoffDateIso: string;
     /** Whether `today` is the announcement day. */
     notify: boolean;
 };
@@ -62,7 +66,9 @@ export function computeReleaseSchedule(now: Date, overrideToday?: string | null)
         today,
         announcementDate,
         onpremReleaseDate: toLongDate(firstMonday),
+        onpremReleaseDateIso: toIsoDate(firstMonday),
         branchoffDate: toLongDate(branchoff),
+        branchoffDateIso: toIsoDate(branchoff),
         notify: today === announcementDate,
     };
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { closeCompletedMilestones, moveMilestoneLabelsToNextVersion, updateMilestonesOnRelease } from "../../src/services/milestone";
+import { closeCompletedMilestones, ensureReleaseMilestone, moveMilestoneLabelsToNextVersion, updateMilestonesOnRelease } from "../../src/services/milestone";
 import { createMockToolkit } from "../helpers";
 
 /** Builds a mocked toolkit with the issues REST + graphql surface these tests touch. */
@@ -366,5 +366,113 @@ describe("closeCompletedMilestones", () => {
             owner: "acme",
             repo: "widgets",
         }));
+    });
+});
+
+describe("ensureReleaseMilestone", () => {
+    const originalDryRun = process.env.DRY_RUN;
+
+    const schedule = {
+        version: "6.7.15.0",
+        dueOn: "2026-10-05",
+        releaseDate: "Monday, October 5, 2026",
+        branchOffDate: "Monday, September 21, 2026",
+    };
+
+    beforeEach(() => {
+        delete process.env.DRY_RUN;
+    });
+
+    afterEach(() => {
+        if (originalDryRun === undefined) {
+            delete process.env.DRY_RUN;
+        } else {
+            process.env.DRY_RUN = originalDryRun;
+        }
+    });
+
+    /** `existing` is the milestone getMilestoneByTitle will find, or none at all. */
+    function scheduleToolkit(existing?: Record<string, unknown>) {
+        const toolkit = createMockToolkit();
+
+        toolkit.github.paginate = vi.fn().mockResolvedValue(existing ? [existing] : []);
+        toolkit.github.rest.issues = {
+            listMilestones: vi.fn(),
+            createMilestone: vi.fn().mockResolvedValue({ data: {} }),
+            updateMilestone: vi.fn().mockResolvedValue({}),
+        };
+
+        return toolkit;
+    }
+
+    it("creates the milestone with its due date and description", async () => {
+        const toolkit = scheduleToolkit();
+
+        await ensureReleaseMilestone(toolkit, schedule);
+
+        expect(toolkit.github.rest.issues.createMilestone).toHaveBeenCalledWith(expect.objectContaining({
+            owner: "shopware",
+            repo: "shopware",
+            title: "6.7.15.0",
+            due_on: "2026-10-05T00:00:00Z",
+        }));
+        const { description } = toolkit.github.rest.issues.createMilestone.mock.calls[0][0];
+        expect(description).toContain("Monday, October 5, 2026");
+        expect(description).toContain("Monday, September 21, 2026");
+    });
+
+    it("fills in a due date that is missing", async () => {
+        const toolkit = scheduleToolkit({ number: 7, title: "6.7.15.0", state: "open", due_on: null, description: "hand written" });
+
+        await ensureReleaseMilestone(toolkit, schedule);
+
+        expect(toolkit.github.rest.issues.updateMilestone).toHaveBeenCalledWith(expect.objectContaining({
+            milestone_number: 7,
+            due_on: "2026-10-05T00:00:00Z",
+        }));
+        // The description was already there and must survive.
+        expect(toolkit.github.rest.issues.updateMilestone.mock.calls[0][0]).not.toHaveProperty("description");
+    });
+
+    it("never overwrites a due date that was moved by hand", async () => {
+        const toolkit = scheduleToolkit({ number: 7, title: "6.7.15.0", state: "open", due_on: "2026-10-19T00:00:00Z", description: "d" });
+
+        await ensureReleaseMilestone(toolkit, schedule);
+
+        expect(toolkit.github.rest.issues.updateMilestone).not.toHaveBeenCalled();
+        expect(toolkit.core.info).toHaveBeenCalledWith(expect.stringContaining("2026-10-19"));
+    });
+
+    it("leaves a closed milestone alone", async () => {
+        const toolkit = scheduleToolkit({ number: 7, title: "6.7.15.0", state: "closed", due_on: null, description: null });
+
+        await ensureReleaseMilestone(toolkit, schedule);
+
+        expect(toolkit.github.rest.issues.updateMilestone).not.toHaveBeenCalled();
+        expect(toolkit.github.rest.issues.createMilestone).not.toHaveBeenCalled();
+    });
+
+    it("does nothing when the milestone is already complete", async () => {
+        const toolkit = scheduleToolkit({ number: 7, title: "6.7.15.0", state: "open", due_on: "2026-10-05T00:00:00Z", description: "d" });
+
+        await ensureReleaseMilestone(toolkit, schedule);
+
+        expect(toolkit.github.rest.issues.updateMilestone).not.toHaveBeenCalled();
+    });
+
+    it("writes nothing in dry run mode", async () => {
+        process.env.DRY_RUN = "true";
+        const toolkit = scheduleToolkit();
+
+        await ensureReleaseMilestone(toolkit, schedule);
+
+        expect(toolkit.github.rest.issues.createMilestone).not.toHaveBeenCalled();
+        expect(toolkit.core.info).toHaveBeenCalledWith(expect.stringContaining("6.7.15.0"));
+    });
+
+    it("rejects a version that is not a full four-segment version", async () => {
+        const toolkit = scheduleToolkit();
+
+        await expect(ensureReleaseMilestone(toolkit, { ...schedule, version: "6.8" })).rejects.toThrow("6.8");
     });
 });

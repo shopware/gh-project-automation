@@ -11,6 +11,13 @@ describe("computeReleaseSchedule", () => {
         expect(schedule.announcementDate).toBe("2025-06-18"); // 5 days before branch-off
     });
 
+    it("exposes both dates as ISO dates for the milestone due date", () => {
+        const schedule = computeReleaseSchedule(new Date("2025-06-12T00:00:00Z"));
+
+        expect(schedule.onpremReleaseDateIso).toBe("2025-07-07");
+        expect(schedule.branchoffDateIso).toBe("2025-06-23");
+    });
+
     it("handles the December -> January year rollover", () => {
         // December 2025 -> next month January 2026; first Monday is January 5.
         const schedule = computeReleaseSchedule(new Date("2025-12-15T00:00:00Z"));

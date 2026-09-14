@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.0](https://github.com/shopware/gh-project-automation/compare/v1.16.0...v1.17.0) (2026-09-14)
+
+
+### Features
+
+* close milestones of released versions ([#97](https://github.com/shopware/gh-project-automation/issues/97)) ([e28df06](https://github.com/shopware/gh-project-automation/commit/e28df06ba09abd5a8cd57b2a90da406c7cb1551d))
+
 ## [1.16.0](https://github.com/shopware/gh-project-automation/compare/v1.15.3...v1.16.0) (2026-07-30)
 
 

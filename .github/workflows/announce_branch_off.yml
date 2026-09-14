@@ -22,20 +22,14 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-      - name: Get Shopware version
-        id: version
-        uses: shopware/github-actions/shopware-version@main
-
-      - name: Calculate next minor version
-        id: next-version
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          LATEST=$(gh api repos/shopware/shopware/releases/latest --jq '.tag_name')
-          LATEST="${LATEST#v}"
-          IFS='.' read -r -a parts <<< "$LATEST"
-          parts[2]=$((parts[2] + 1))
-          echo "next_minor=${parts[0]}.${parts[1]}.${parts[2]}.0" >> "$GITHUB_OUTPUT"
+      # Not releases/latest: the 6.6 LTS line publishes between the 6.7 releases, so
+      # the newest release is regularly an LTS patch and bumping it yields a version
+      # that was never planned. The action filters by major and knows about branch-off.
+      - name: Get versions
+        id: versions
+        uses: shopware/github-actions/versions@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Calculate release dates
         id: dates
@@ -59,7 +53,7 @@ jobs:
           echo "branchoff_date:      ${{ steps.dates.outputs.branchoff_date }}"
           echo "announcement_date:   ${{ steps.dates.outputs.announcement_date }}"
           echo "notify:              ${{ steps.dates.outputs.notify }}"
-          echo "next_minor_release:  ${{ steps.next-version.outputs.next_minor }}"
+          echo "next_minor_release:  ${{ steps.versions.outputs.next-minor }}"
 
       - name: Send Slack notification
         if: steps.dates.outputs.notify == 'true'
@@ -69,5 +63,5 @@ jobs:
             -d '{
               "onprem_release_date": "${{ steps.dates.outputs.onprem_release_date }}",
               "branchoff_date": "${{ steps.dates.outputs.branchoff_date }}",
-              "next_minor_release": "${{ steps.next-version.outputs.next_minor }}"
+              "next_minor_release": "${{ steps.versions.outputs.next-minor }}"
             }'

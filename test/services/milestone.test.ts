@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { closeCompletedMilestones, ensureReleaseMilestone, moveLtsMilestoneLabels, moveMilestoneLabelsToNextVersion, scheduleReleaseMilestone, updateMilestonesOnRelease } from "../../src/services/milestone";
+import { closeCompletedMilestones, ensureReleaseMilestone, moveLtsMilestoneLabels, moveMilestoneLabelsToNextVersion, scheduleReleaseMilestone, syncMilestoneForPR, updateMilestonesOnRelease } from "../../src/services/milestone";
 import { createMockToolkit } from "../helpers";
 
 /** Builds a mocked toolkit with the issues REST + graphql surface these tests touch. */
@@ -660,5 +660,119 @@ describe("updateMilestonesOnRelease on a maintenance line", () => {
         expect(toolkit.github.rest.issues.addLabels).toHaveBeenCalledWith(expect.objectContaining({
             labels: ["milestone/6.7.11.0"],
         }));
+    });
+});
+
+describe("syncMilestoneForPR", () => {
+    /** Builds a toolkit around one pull request payload. `milestones` is what the repo already has. */
+    function syncToolkit(pullRequest: Record<string, unknown>, action = "labeled", milestones: Record<string, unknown>[] = [{ number: 7, title: "6.7.15.0" }]) {
+        const toolkit = createMockToolkit();
+
+        toolkit.context = {
+            repo: { owner: "shopware", repo: "shopware" },
+            payload: { action, pull_request: { number: 1, labels: [], head: "feat/x", assignee: "someone", ...pullRequest } },
+        };
+        toolkit.github.paginate = vi.fn().mockResolvedValue(milestones);
+        // No linked development issue unless a test says otherwise.
+        toolkit.github.graphql = vi.fn().mockResolvedValue({ search: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+        toolkit.github.rest.issues = {
+            listMilestones: vi.fn(),
+            update: vi.fn().mockResolvedValue({}),
+            createMilestone: vi.fn().mockResolvedValue({ data: { number: 9, title: "6.7.16.0" } }),
+        };
+
+        return toolkit;
+    }
+
+    it("puts an open pull request on the milestone its label names", async () => {
+        const toolkit = syncToolkit({ labels: [{ name: "milestone/6.7.15.0" }] });
+
+        await syncMilestoneForPR(toolkit);
+
+        expect(toolkit.github.rest.issues.update).toHaveBeenCalledWith(expect.objectContaining({
+            issue_number: 1,
+            milestone: 7,
+        }));
+    });
+
+    it("creates the milestone when the label names a new one", async () => {
+        const toolkit = syncToolkit({ labels: [{ name: "milestone/6.7.16.0" }] });
+
+        await syncMilestoneForPR(toolkit);
+
+        expect(toolkit.github.rest.issues.createMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: "6.7.16.0" }));
+        expect(toolkit.github.rest.issues.update).toHaveBeenCalledWith(expect.objectContaining({ milestone: 9 }));
+    });
+
+    it("does nothing when the milestone is already right", async () => {
+        const toolkit = syncToolkit({ labels: [{ name: "milestone/6.7.15.0" }], milestone: { number: 7 } });
+
+        await syncMilestoneForPR(toolkit);
+
+        expect(toolkit.github.rest.issues.update).not.toHaveBeenCalled();
+    });
+
+    it("clears the milestone when the label is gone", async () => {
+        const toolkit = syncToolkit({ labels: [], milestone: { number: 7 } }, "unlabeled");
+
+        await syncMilestoneForPR(toolkit);
+
+        expect(toolkit.github.rest.issues.update).toHaveBeenCalledWith(expect.objectContaining({
+            issue_number: 1,
+            milestone: null,
+        }));
+    });
+
+    it("clears the milestone of a pull request closed without merging", async () => {
+        // GitHub counts every closed item as completed, so an abandoned one would
+        // otherwise show up as delivered.
+        const toolkit = syncToolkit({ labels: [{ name: "milestone/6.7.15.0" }], milestone: { number: 7 }, merged: false }, "closed");
+
+        await syncMilestoneForPR(toolkit);
+
+        expect(toolkit.github.rest.issues.update).toHaveBeenCalledWith(expect.objectContaining({ milestone: null }));
+    });
+
+    it("keeps the milestone of a merged pull request", async () => {
+        const toolkit = syncToolkit({ labels: [{ name: "milestone/6.7.15.0" }], milestone: { number: 7 }, merged: true }, "closed");
+
+        await syncMilestoneForPR(toolkit);
+
+        expect(toolkit.github.rest.issues.update).not.toHaveBeenCalled();
+    });
+
+    it("does not clear a milestone that was never set", async () => {
+        const toolkit = syncToolkit({ labels: [] }, "unlabeled");
+
+        await syncMilestoneForPR(toolkit);
+
+        expect(toolkit.github.rest.issues.update).not.toHaveBeenCalled();
+    });
+
+    it("prefers the linked development issue over the pull request", async () => {
+        const toolkit = syncToolkit({ labels: [{ name: "milestone/6.7.15.0" }] });
+        toolkit.github.graphql = vi.fn().mockResolvedValue({
+            search: {
+                nodes: [{
+                    number: 1,
+                    closingIssuesReferences: { nodes: [{ id: "I_1", title: "the issue", number: 42, url: "u", repository: { owner: { login: "shopware" }, name: "shopware" } }] },
+                }],
+                pageInfo: { hasNextPage: false, endCursor: null },
+            },
+        });
+
+        await syncMilestoneForPR(toolkit);
+
+        expect(toolkit.github.rest.issues.update).toHaveBeenCalledWith(expect.objectContaining({
+            issue_number: 42,
+            milestone: 7,
+        }));
+    });
+
+    it("refuses to run outside a pull request workflow", async () => {
+        const toolkit = createMockToolkit();
+        toolkit.context = { repo: { owner: "shopware", repo: "shopware" }, payload: {} };
+
+        await expect(syncMilestoneForPR(toolkit)).rejects.toThrow("pull_request");
     });
 });

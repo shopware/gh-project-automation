@@ -712,3 +712,67 @@ export async function scheduleReleaseMilestone(toolkit: Toolkit, options: Schedu
         dryRun: options.dryRun,
     });
 }
+
+/**
+ * syncMilestoneForPR makes the milestone field of a pull request follow its
+ * `milestone/*` label, so an open pull request already counts towards the release
+ * it is planned for instead of appearing only once it is merged.
+ *
+ * Without this the milestone of an unreleased version shows every item as done,
+ * because nothing enters it before merging, which makes it useless for planning.
+ *
+ * A pull request closed without merging loses its milestone again — GitHub counts
+ * every closed item as completed, so an abandoned one would otherwise inflate the
+ * progress of the release. A linked issue keeps its milestone in that case: the
+ * issue is planned in its own right, and abandoning one attempt at it is not a
+ * decision to drop it from the release.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ */
+export async function syncMilestoneForPR(toolkit: Toolkit): Promise<void> {
+    const pr = toolkit.context.payload.pull_request;
+    if (!pr) {
+        throw new Error("This function can only be called on 'pull_request' workflows.");
+    }
+
+    const { owner, repo } = toolkit.context.repo;
+    const labels: { name: string }[] = pr.labels ?? [];
+    const milestoneLabel = labels.find(label => label.name.startsWith("milestone/"));
+    const abandoned = toolkit.context.payload.action === "closed" && !pr.merged;
+
+    if (abandoned || !milestoneLabel) {
+        if (!pr.milestone) {
+            toolkit.core.info(`#${pr.number} carries no milestone, nothing to clear.`);
+            return;
+        }
+
+        await toolkit.github.rest.issues.update({ owner, repo, issue_number: pr.number, milestone: null });
+        toolkit.core.info(abandoned
+            ? `Cleared the milestone of #${pr.number}: closed without merging.`
+            : `Cleared the milestone of #${pr.number}: it has no milestone label.`);
+        return;
+    }
+
+    const milestoneTitle = milestoneLabel.name.split("/")[1];
+    let milestone = await getMilestoneByTitle(toolkit, repo, milestoneTitle, owner);
+
+    if (!milestone) {
+        toolkit.core.info(`Couldn't find a milestone with the title "${milestoneTitle}". Creating one...`);
+        milestone = (await toolkit.github.rest.issues.createMilestone({ owner, repo, title: milestoneTitle })).data;
+    }
+
+    const linkedIssue = await getDevelopmentIssueForPullRequest(toolkit, `${owner}/${repo}`, pr.number, pr.head, pr.assignee);
+    if (linkedIssue && linkedIssue.number) {
+        await toolkit.github.rest.issues.update({ owner, repo, issue_number: linkedIssue.number, milestone: milestone.number });
+        toolkit.core.info(`Set milestone "${milestoneTitle}" on the issue linked to #${pr.number} (#${linkedIssue.number}).`);
+        return;
+    }
+
+    if (pr.milestone?.number === milestone.number) {
+        toolkit.core.info(`#${pr.number} is already on milestone "${milestoneTitle}".`);
+        return;
+    }
+
+    await toolkit.github.rest.issues.update({ owner, repo, issue_number: pr.number, milestone: milestone.number });
+    toolkit.core.info(`Set milestone "${milestoneTitle}" on #${pr.number}.`);
+}

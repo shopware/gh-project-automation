@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.19.0](https://github.com/shopware/gh-project-automation/compare/v1.18.0...v1.19.0) (2026-09-15)
+
+
+### Features
+
+* move milestone labels on a maintenance release ([#102](https://github.com/shopware/gh-project-automation/issues/102)) ([70c8d94](https://github.com/shopware/gh-project-automation/commit/70c8d946ba64dbf6329184fc36bf9ca717e9e1b2))
+
+
+### Bug Fixes
+
+* measure pull request inactivity by human activity, not updated_at ([#96](https://github.com/shopware/gh-project-automation/issues/96)) ([bb0698f](https://github.com/shopware/gh-project-automation/commit/bb0698f6fba1630650df6a79dc2c399353b556ad))
+
 ## [1.18.0](https://github.com/shopware/gh-project-automation/compare/v1.17.0...v1.18.0) (2026-09-14)
 
 

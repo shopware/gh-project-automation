@@ -548,7 +548,6 @@ function milestoneDescription(options: EnsureReleaseMilestoneOptions): string {
     return [
         `Planned on-prem release: ${options.releaseDate}.`,
         `Branch-off: ${options.branchOffDate}.`,
-        "Generated from the release schedule. Patch releases are not planned ahead and carry no date.",
     ].join(" ");
 }
 

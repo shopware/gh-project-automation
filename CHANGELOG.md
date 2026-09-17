@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.20.0](https://github.com/shopware/gh-project-automation/compare/v1.19.0...v1.20.0) (2026-09-17)
+
+
+### Features
+
+* schedule the LTS patch milestone alongside its minor ([#105](https://github.com/shopware/gh-project-automation/issues/105)) ([af65bfb](https://github.com/shopware/gh-project-automation/commit/af65bfb0505c11e20ec3ff9c9a523a5c9a4ab7e2))
+
 ## [1.19.0](https://github.com/shopware/gh-project-automation/compare/v1.18.0...v1.19.0) (2026-09-15)
 
 

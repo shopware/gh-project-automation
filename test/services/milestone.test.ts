@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { closeCompletedMilestones, ensureReleaseMilestone, moveLtsMilestoneLabels, moveMilestoneLabelsToNextVersion, scheduleReleaseMilestone, updateMilestonesOnRelease } from "../../src/services/milestone";
+import { closeCompletedMilestones, ensureLtsPatchMilestone, ensureReleaseMilestone, moveLtsMilestoneLabels, moveMilestoneLabelsToNextVersion, scheduleReleaseMilestone, updateMilestonesOnRelease } from "../../src/services/milestone";
 import { createMockToolkit } from "../helpers";
 
 /** Builds a mocked toolkit with the issues REST + graphql surface these tests touch. */
@@ -479,6 +479,81 @@ describe("ensureReleaseMilestone", () => {
     });
 });
 
+describe("ensureLtsPatchMilestone", () => {
+    const originalDryRun = process.env.DRY_RUN;
+
+    const schedule = {
+        version: "6.6.10.26",
+        dueOn: "2026-10-05",
+        releaseDate: "Monday, October 5, 2026",
+    };
+
+    beforeEach(() => {
+        delete process.env.DRY_RUN;
+    });
+
+    afterEach(() => {
+        if (originalDryRun === undefined) {
+            delete process.env.DRY_RUN;
+        } else {
+            process.env.DRY_RUN = originalDryRun;
+        }
+    });
+
+    function scheduleToolkit(existing?: Record<string, unknown>) {
+        const toolkit = createMockToolkit();
+
+        toolkit.github.paginate = vi.fn().mockResolvedValue(existing ? [existing] : []);
+        toolkit.github.rest.issues = {
+            listMilestones: vi.fn(),
+            createMilestone: vi.fn().mockResolvedValue({ data: {} }),
+            updateMilestone: vi.fn().mockResolvedValue({}),
+        };
+
+        return toolkit;
+    }
+
+    it("creates the milestone with a due date and a description without a branch-off line", async () => {
+        const toolkit = scheduleToolkit();
+
+        await ensureLtsPatchMilestone(toolkit, schedule);
+
+        expect(toolkit.github.rest.issues.createMilestone).toHaveBeenCalledWith(expect.objectContaining({
+            owner: "shopware",
+            repo: "shopware",
+            title: "6.6.10.26",
+            due_on: "2026-10-05T00:00:00Z",
+        }));
+        const { description } = toolkit.github.rest.issues.createMilestone.mock.calls[0][0];
+        expect(description).toContain("Monday, October 5, 2026");
+        expect(description).not.toContain("Branch-off");
+    });
+
+    it("fills in a due date that is missing without touching an existing description", async () => {
+        const toolkit = scheduleToolkit({ number: 9, title: "6.6.10.26", state: "open", due_on: null, description: "hand written" });
+
+        await ensureLtsPatchMilestone(toolkit, schedule);
+
+        expect(toolkit.github.rest.issues.updateMilestone).toHaveBeenCalledWith(expect.objectContaining({
+            milestone_number: 9,
+            due_on: "2026-10-05T00:00:00Z",
+        }));
+        expect(toolkit.github.rest.issues.updateMilestone.mock.calls[0][0]).not.toHaveProperty("description");
+    });
+
+    it("rejects a version that isn't a patch", async () => {
+        const toolkit = scheduleToolkit();
+
+        await expect(ensureLtsPatchMilestone(toolkit, { ...schedule, version: "6.6.10.0" })).rejects.toThrow("minor release");
+    });
+
+    it("rejects a version that is not a full four-segment version", async () => {
+        const toolkit = scheduleToolkit();
+
+        await expect(ensureLtsPatchMilestone(toolkit, { ...schedule, version: "6.6.x" })).rejects.toThrow("6.6.x");
+    });
+});
+
 describe("scheduleReleaseMilestone", () => {
     /** `releases` are tag/date pairs as the releases endpoint returns them, newest first. */
     function releaseToolkit(releases: [string, string][], existing?: Record<string, unknown>) {
@@ -562,6 +637,28 @@ describe("scheduleReleaseMilestone", () => {
 
         expect(toolkit.core.warning).toHaveBeenCalledWith(expect.stringContaining("6.8"));
         expect(toolkit.github.rest.issues.createMilestone).not.toHaveBeenCalled();
+    });
+
+    it("also dates the LTS patch shipping alongside the minor, without a branch-off line", async () => {
+        const toolkit = releaseToolkit(RELEASES);
+
+        await scheduleReleaseMilestone(toolkit, { version: "6.7.15.0", ltsVersion: "6.6.10.26", dryRun: false });
+
+        expect(toolkit.github.rest.issues.createMilestone).toHaveBeenCalledWith(expect.objectContaining({
+            title: "6.6.10.26",
+            due_on: "2026-10-05T00:00:00Z",
+        }));
+        const ltsCall = toolkit.github.rest.issues.createMilestone.mock.calls.find(([call]) => call.title === "6.6.10.26")?.[0];
+        expect(ltsCall.description).not.toContain("Branch-off");
+    });
+
+    it("does not skip the minor when the LTS version is invalid", async () => {
+        const toolkit = releaseToolkit(RELEASES);
+
+        await scheduleReleaseMilestone(toolkit, { version: "6.7.15.0", ltsVersion: "not-a-version", dryRun: false });
+
+        expect(toolkit.github.rest.issues.createMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: "6.7.15.0" }));
+        expect(toolkit.core.warning).toHaveBeenCalledWith(expect.stringContaining("not-a-version"));
     });
 });
 

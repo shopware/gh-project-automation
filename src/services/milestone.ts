@@ -551,45 +551,39 @@ function milestoneDescription(options: EnsureReleaseMilestoneOptions): string {
     ].join(" ");
 }
 
+type UpsertMilestoneScheduleOptions = {
+    version: string;
+    dueOn: string;
+    description: string;
+    owner: string;
+    repo: string;
+    dryRun: boolean;
+};
+
 /**
- * ensureReleaseMilestone makes the milestone for an upcoming release exist ahead
- * of time, carrying the planned release date as its due date so the repository's
- * milestone page doubles as a public release schedule.
- *
- * It only ever fills in what is missing and never overwrites a value that is
- * already there. A release that slips is corrected by hand — in the milestone and
- * in the release thread — and this must not silently revert that correction on its
- * next run.
- *
- * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
- * @param options - see {@link EnsureReleaseMilestoneOptions}
+ * Creates the milestone if it doesn't exist yet, otherwise fills in whichever of
+ * `due_on`/`description` it is still missing. Never overwrites a value that is
+ * already there: a release that slips is corrected by hand — in the milestone and
+ * in the release thread — and this must not silently revert that correction on
+ * its next run.
  */
-export async function ensureReleaseMilestone(toolkit: Toolkit, options: EnsureReleaseMilestoneOptions): Promise<void> {
-    const owner = options.owner ?? "shopware";
-    const repo = options.repo ?? "shopware";
-    const dryRun = options.dryRun ?? isDryRun();
-
-    if (!VERSION_REGEX.test(options.version)) {
-        throw new Error(`"${options.version}" is not a valid version (expected e.g. "6.7.15.0").`);
-    }
-
-    const dueOn = `${options.dueOn}T00:00:00Z`;
-    const description = milestoneDescription(options);
-    const existing = await getMilestoneByTitle(toolkit, repo, options.version, owner);
+async function upsertMilestoneSchedule(toolkit: Toolkit, { version, dueOn: dueOnDate, description, owner, repo, dryRun }: UpsertMilestoneScheduleOptions): Promise<void> {
+    const dueOn = `${dueOnDate}T00:00:00Z`;
+    const existing = await getMilestoneByTitle(toolkit, repo, version, owner);
 
     if (!existing) {
         if (dryRun) {
-            toolkit.core.info(`Would create milestone "${options.version}" in ${owner}/${repo}, due ${options.dueOn}.`);
+            toolkit.core.info(`Would create milestone "${version}" in ${owner}/${repo}, due ${dueOnDate}.`);
             return;
         }
 
-        await toolkit.github.rest.issues.createMilestone({ owner, repo, title: options.version, due_on: dueOn, description });
-        toolkit.core.info(`Created milestone "${options.version}" in ${owner}/${repo}, due ${options.dueOn}.`);
+        await toolkit.github.rest.issues.createMilestone({ owner, repo, title: version, due_on: dueOn, description });
+        toolkit.core.info(`Created milestone "${version}" in ${owner}/${repo}, due ${dueOnDate}.`);
         return;
     }
 
     if (existing.state === "closed") {
-        toolkit.core.info(`Leaving milestone "${options.version}" alone: it is already closed.`);
+        toolkit.core.info(`Leaving milestone "${version}" alone: it is already closed.`);
         return;
     }
 
@@ -597,8 +591,8 @@ export async function ensureReleaseMilestone(toolkit: Toolkit, options: EnsureRe
 
     if (!existing.due_on) {
         update.due_on = dueOn;
-    } else if (existing.due_on.slice(0, 10) !== options.dueOn) {
-        toolkit.core.info(`Keeping the due date of "${options.version}": it is set to ${existing.due_on.slice(0, 10)}, not the scheduled ${options.dueOn}.`);
+    } else if (existing.due_on.slice(0, 10) !== dueOnDate) {
+        toolkit.core.info(`Keeping the due date of "${version}": it is set to ${existing.due_on.slice(0, 10)}, not the scheduled ${dueOnDate}.`);
     }
 
     if (!existing.description) {
@@ -606,22 +600,94 @@ export async function ensureReleaseMilestone(toolkit: Toolkit, options: EnsureRe
     }
 
     if (Object.keys(update).length === 0) {
-        toolkit.core.info(`Milestone "${options.version}" is already complete, nothing to fill in.`);
+        toolkit.core.info(`Milestone "${version}" is already complete, nothing to fill in.`);
         return;
     }
 
     if (dryRun) {
-        toolkit.core.info(`Would fill in ${Object.keys(update).join(" and ")} on milestone "${options.version}".`);
+        toolkit.core.info(`Would fill in ${Object.keys(update).join(" and ")} on milestone "${version}".`);
         return;
     }
 
     await toolkit.github.rest.issues.updateMilestone({ owner, repo, milestone_number: existing.number, ...update });
-    toolkit.core.info(`Filled in ${Object.keys(update).join(" and ")} on milestone "${options.version}".`);
+    toolkit.core.info(`Filled in ${Object.keys(update).join(" and ")} on milestone "${version}".`);
+}
+
+/**
+ * ensureReleaseMilestone makes the milestone for an upcoming release exist ahead
+ * of time, carrying the planned release date as its due date so the repository's
+ * milestone page doubles as a public release schedule.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param options - see {@link EnsureReleaseMilestoneOptions}
+ */
+export async function ensureReleaseMilestone(toolkit: Toolkit, options: EnsureReleaseMilestoneOptions): Promise<void> {
+    if (!VERSION_REGEX.test(options.version)) {
+        throw new Error(`"${options.version}" is not a valid version (expected e.g. "6.7.15.0").`);
+    }
+
+    await upsertMilestoneSchedule(toolkit, {
+        version: options.version,
+        dueOn: options.dueOn,
+        description: milestoneDescription(options),
+        owner: options.owner ?? "shopware",
+        repo: options.repo ?? "shopware",
+        dryRun: options.dryRun ?? isDryRun(),
+    });
+}
+
+export type EnsureLtsPatchMilestoneOptions = {
+    /** The LTS patch version the milestone is for, e.g. "6.6.10.26". */
+    version: string;
+    /** Planned release date as `YYYY-MM-DD`, used as the milestone's due date. */
+    dueOn: string;
+    /** Human-readable release date for the description, e.g. "Monday, October 5, 2026". */
+    releaseDate: string;
+    /** Repository owner. Defaults to "shopware". */
+    owner?: string;
+    /** Repository name. Defaults to "shopware". */
+    repo?: string;
+    /** Overrides the DRY_RUN env detection when provided. */
+    dryRun?: boolean;
+};
+
+/**
+ * ensureLtsPatchMilestone gives an LTS patch milestone the same due date as the
+ * trunk minor it ships alongside. Unlike {@link ensureReleaseMilestone}, its
+ * description carries no branch-off line: a maintenance line has no branch-off,
+ * a release is the only event that closes one of its milestones.
+ *
+ * @param toolkit - Octokit instance. See: https://octokit.github.io/rest.js
+ * @param options - see {@link EnsureLtsPatchMilestoneOptions}
+ */
+export async function ensureLtsPatchMilestone(toolkit: Toolkit, options: EnsureLtsPatchMilestoneOptions): Promise<void> {
+    const matches = VERSION_REGEX.exec(options.version);
+    if (!matches) {
+        throw new Error(`"${options.version}" is not a valid version (expected e.g. "6.6.10.26").`);
+    }
+    if (matches[4] === "0") {
+        throw new Error(`"${options.version}" is a minor release, not an LTS patch.`);
+    }
+
+    await upsertMilestoneSchedule(toolkit, {
+        version: options.version,
+        dueOn: options.dueOn,
+        description: `Planned on-prem release: ${options.releaseDate}.`,
+        owner: options.owner ?? "shopware",
+        repo: options.repo ?? "shopware",
+        dryRun: options.dryRun ?? isDryRun(),
+    });
 }
 
 export type ScheduleReleaseMilestoneOptions = {
     /** The version to schedule, e.g. "6.7.15.0". */
     version: string;
+    /**
+     * The LTS patch that ships alongside this minor, e.g. "6.6.10.26". On-prem
+     * releases go out together, so its milestone gets the same due date. Omit
+     * when no maintenance line is currently active.
+     */
+    ltsVersion?: string;
     /** Repository owner. Defaults to "shopware". */
     owner?: string;
     /** Repository name. Defaults to "shopware". */
@@ -710,4 +776,24 @@ export async function scheduleReleaseMilestone(toolkit: Toolkit, options: Schedu
         repo,
         dryRun: options.dryRun,
     });
+
+    if (!options.ltsVersion) {
+        return;
+    }
+
+    // Scheduling the minor above must not be undone by a mistake in the LTS
+    // side, e.g. a malformed ltsVersion — so this failure is reported but never
+    // thrown.
+    try {
+        await ensureLtsPatchMilestone(toolkit, {
+            version: options.ltsVersion,
+            dueOn: schedule.releaseDateIso,
+            releaseDate: schedule.releaseDate,
+            owner,
+            repo,
+            dryRun: options.dryRun,
+        });
+    } catch (error) {
+        toolkit.core.warning(`Failed to schedule LTS patch milestone "${options.ltsVersion}": ${error instanceof Error ? error.message : String(error)}`);
+    }
 }

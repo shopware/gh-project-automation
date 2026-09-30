@@ -165,7 +165,7 @@ export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, d
                     search(
                       type: ISSUE
                       first: 100
-                      query: "repo:shopware/shopware is:issue state:open project:shopware/27 label:priority/low -label:lifecycle/AboutToClose -label:lifecycle/DoNotClose created:<=$staleDate"
+                      query: "repo:shopware/shopware is:issue state:open project:shopware/27 label:priority/low -label:lifecycle/AboutToClose -label:lifecycle/do-not-close created:<=$staleDate"
                     ) {
                       pageInfo {
                         hasNextPage

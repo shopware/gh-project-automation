@@ -39,6 +39,24 @@ export async function closePullRequest(toolkit: Toolkit, pullRequestId: string) 
     toolkit.core.debug(`closePullRequest response: ${JSON.stringify(res)}`);
 }
 
+export async function convertPullRequestToDraft(toolkit: Toolkit, pullRequestId: string) {
+    const res = await toolkit.github.graphql(/* GraphQL */ `
+        mutation convertPullRequestToDraft($pullRequestId: ID!) {
+            convertPullRequestToDraft(input: {
+                pullRequestId: $pullRequestId
+            }) {
+                clientMutationId
+            }
+        }
+    `,
+        {
+            pullRequestId: pullRequestId
+        }
+    );
+
+    toolkit.core.debug(`convertPullRequestToDraft response: ${JSON.stringify(res)}`);
+}
+
 export async function getLabelByName(toolkit: Toolkit, repository: string, labelName: string) {
     const res = await toolkit.github.graphql<{
         repository: {
@@ -515,6 +533,7 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string, wit
         title: string,
         number: number,
         url: string,
+        isDraft: boolean,
         author: {
             login: string
         } | null,
@@ -578,6 +597,7 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string, wit
                         title
                         number
                         url
+                        isDraft
                         author {
                             login
                         }
@@ -631,8 +651,15 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string, wit
                                 }
                             }
                         }
-                        timelineItems(last: 40, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW, PULL_REQUEST_COMMIT]) @include(if: $withActivity) {
+                        timelineItems(last: 40, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW, PULL_REQUEST_COMMIT, CONVERT_TO_DRAFT_EVENT]) @include(if: $withActivity) {
                             nodes {
+                                ... on ConvertToDraftEvent {
+                                    convertedAt: createdAt
+                                    actor {
+                                        login
+                                        __typename
+                                    }
+                                }
                                 ... on IssueComment {
                                     createdAt
                                     author {

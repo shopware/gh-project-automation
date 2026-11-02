@@ -71,6 +71,13 @@ function staleToolkit(pullRequests: TestPullRequest[], internalLogins: string[] 
             return { user: { organizationVerifiedDomainEmails: internalLogins.includes(login) ? [`${login}@shopware.com`] : [] } };
         }
 
+        if (query.includes("getPullRequestComments")) {
+            const pr = pullRequests.find((candidate) => `id-${candidate.number}` === variables.pullRequestId);
+            const nodes = (pr?.timeline ?? []).filter((node) => typeof (node as { body?: unknown }).body === "string");
+
+            return { node: { comments: { nodes } } };
+        }
+
         if (query.includes("closeIssue")) {
             closed.push(String(variables.pullRequestId));
 
@@ -96,8 +103,17 @@ function staleToolkit(pullRequests: TestPullRequest[], internalLogins: string[] 
 }
 
 /** A conversion to draft as the timeline reports it. */
-function convertedToDraft(at: string, login: string, typename: string = "Bot") {
-    return { convertedAt: at, actor: { login, __typename: typename } };
+function convertedToDraft(at: string) {
+    return { convertedAt: at };
+}
+
+/** The warning comment a previous run left. */
+function staleWarning(at: string) {
+    return {
+        createdAt: at,
+        body: "<!-- stale-pull-request-warning -->\nThis draft has had no activity for 28 days.",
+        author: { login: "shopware-octo-sts-app-2", __typename: "Bot" },
+    };
 }
 
 describe("manageOldPullRequests", () => {
@@ -158,14 +174,15 @@ describe("manageOldPullRequests", () => {
         expect(variables.searchQuery).not.toContain("draft:false");
     });
 
-    it("closes and labels a draft the bot made once it stayed inactive for another period", async () => {
+    it("closes and labels a draft once a full period has passed since the warning", async () => {
         const { toolkit, closed, drafted, comments, labeled } = staleToolkit([{
             number: 17488,
             isDraft: true,
             assignee: "vienthuong",
             timeline: [
                 { createdAt: OLD, author: { login: "g-volker", __typename: "User" } },
-                convertedToDraft(daysAgo(CUTOFF_DAYS + 1), "shopware-octo-sts-app-2"),
+                convertedToDraft(daysAgo(CUTOFF_DAYS + 1)),
+                staleWarning(daysAgo(CUTOFF_DAYS + 1)),
             ],
         }]);
 
@@ -177,29 +194,31 @@ describe("manageOldPullRequests", () => {
         expect(drafted).toEqual([]);
     });
 
-    it("keeps a draft the bot made open until another full period has passed", async () => {
-        const { toolkit, closed } = staleToolkit([{
-            number: 17488,
+    it("waits after the warning until a full period has passed", async () => {
+        const { toolkit, closed, comments } = staleToolkit([{
+            number: 1,
             isDraft: true,
             assignee: "vienthuong",
             timeline: [
-                { createdAt: OLD, author: { login: "g-volker", __typename: "User" } },
-                convertedToDraft(daysAgo(3), "shopware-octo-sts-app-2"),
+                { createdAt: OLD, author: { login: "someone", __typename: "User" } },
+                staleWarning(daysAgo(3)),
             ],
         }]);
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
         expect(closed).toEqual([]);
+        expect(comments).toEqual([]);
     });
 
-    it("keeps a draft the bot made open when a person wrote after the conversion", async () => {
+    it("keeps a draft open when a person wrote after the conversion", async () => {
         const { toolkit, closed } = staleToolkit([{
             number: 17488,
             isDraft: true,
             assignee: "vienthuong",
             timeline: [
-                convertedToDraft(daysAgo(CUTOFF_DAYS + 5), "shopware-octo-sts-app-2"),
+                convertedToDraft(daysAgo(CUTOFF_DAYS + 5)),
+                staleWarning(daysAgo(CUTOFF_DAYS + 5)),
                 { createdAt: daysAgo(2), author: { login: "vienthuong", __typename: "User" } },
             ],
         }]);
@@ -209,16 +228,53 @@ describe("manageOldPullRequests", () => {
         expect(closed).toEqual([]);
     });
 
-    it("never touches a draft a person made, however old", async () => {
-        const { toolkit, closed, drafted } = staleToolkit([
-            { number: 1, isDraft: true, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "someone", __typename: "User" } }] },
-            { number: 2, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD, "shopware-octo-sts-app-2"), convertedToDraft(OLD.replace("01-01", "02-01"), "mitelg", "User")] },
-        ]);
+    it("warns an inactive draft that was opened as one instead of closing it", async () => {
+        const { toolkit, closed, drafted, comments } = staleToolkit([{
+            number: 1,
+            isDraft: true,
+            assignee: "vienthuong",
+            timeline: [{ createdAt: OLD, author: { login: "someone", __typename: "User" } }],
+        }]);
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
+        expect(comments).toEqual(["id-1"]);
         expect(closed).toEqual([]);
         expect(drafted).toEqual([]);
+        const [, commentVariables] = toolkit.github.graphql.mock.calls.find(([query]: [string]) => query.includes("addComment"));
+        expect(commentVariables.body).toContain("<!-- stale-pull-request-warning -->");
+        expect(commentVariables.body).toContain("lifecycle/DoNotClose");
+    });
+
+    it("warns again instead of closing when a person was active after the last warning", async () => {
+        const { toolkit, closed, comments } = staleToolkit([{
+            number: 1,
+            isDraft: true,
+            assignee: "vienthuong",
+            timeline: [
+                staleWarning(daysAgo(CUTOFF_DAYS * 3)),
+                { createdAt: daysAgo(CUTOFF_DAYS * 2), author: { login: "someone", __typename: "User" } },
+            ],
+        }]);
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(comments).toEqual(["id-1"]);
+        expect(closed).toEqual([]);
+    });
+
+    it("does not take a person quoting the warning for the warning itself", async () => {
+        const { toolkit, closed, comments } = staleToolkit([{
+            number: 1,
+            isDraft: true,
+            assignee: "vienthuong",
+            timeline: [{ ...staleWarning(OLD), author: { login: "someone", __typename: "User" } }],
+        }]);
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(comments).toEqual(["id-1"]);
+        expect(closed).toEqual([]);
     });
 
     it("still closes a draft when the label cannot be set", async () => {
@@ -226,7 +282,7 @@ describe("manageOldPullRequests", () => {
             number: 17488,
             isDraft: true,
             assignee: "vienthuong",
-            timeline: [convertedToDraft(OLD, "shopware-octo-sts-app-2")],
+            timeline: [convertedToDraft(OLD), staleWarning(OLD)],
         }]);
         toolkit.github.rest.issues.addLabels = vi.fn().mockRejectedValue(new Error("Resource not accessible by integration")) as never;
 
@@ -352,7 +408,7 @@ describe("manageOldPullRequests", () => {
         process.env.DRY_RUN = "true";
         const { toolkit, closed, drafted, comments, labeled } = staleToolkit([
             { number: 5420, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }] },
-            { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD, "shopware-octo-sts-app-2")] },
+            { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD), staleWarning(OLD)] },
         ]);
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
@@ -368,7 +424,7 @@ describe("manageOldPullRequests", () => {
     it("changes nothing when close is off", async () => {
         const { toolkit, closed, drafted } = staleToolkit([
             { number: 5420, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }] },
-            { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD, "shopware-octo-sts-app-2")] },
+            { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD), staleWarning(OLD)] },
         ]);
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, false);

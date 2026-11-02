@@ -42,8 +42,7 @@ export type ActivityTimelineNode = {
     submittedAt?: string,
     author?: ActivityAuthor,
     commit?: { committedDate: string, author?: { user?: { login: string } | null } | null },
-    convertedAt?: string,
-    actor?: ActivityAuthor
+    convertedAt?: string
 };
 
 export type ActivityReviewThreadNode = {
@@ -100,15 +99,24 @@ export function lastHumanActivityAt(pullRequest: PullRequestActivity): string | 
 }
 
 /**
- * When automation last converted the pull request to a draft, or `undefined` when the
- * latest conversion was a person's, or there was none. A draft a person made is work in
- * progress, not a pull request this job parked.
+ * When the pull request was last converted to a draft, by anyone, or `undefined` when it
+ * never was.
  */
-export function convertedToDraftByBotAt(pullRequest: PullRequestActivity): string | undefined {
-    const conversions = (pullRequest.timelineItems?.nodes ?? [])
-        .filter((node) => node.convertedAt !== undefined)
-        .sort((left, right) => left.convertedAt!.localeCompare(right.convertedAt!));
-    const latest = conversions.at(-1);
+export function lastConvertedToDraftAt(pullRequest: PullRequestActivity): string | undefined {
+    return (pullRequest.timelineItems?.nodes ?? [])
+        .map((node) => node.convertedAt)
+        .filter((at) => at !== undefined)
+        .sort()
+        .at(-1);
+}
 
-    return latest?.actor && !isHumanAuthor(latest.actor) ? latest.convertedAt : undefined;
+/**
+ * When a bot last commented with `marker` in the body, or `undefined` when none did.
+ */
+export function lastBotCommentAt(comments: { createdAt: string, body: string, author: ActivityAuthor }[], marker: string): string | undefined {
+    return comments
+        .filter((comment) => comment.author && !isHumanAuthor(comment.author) && comment.body.includes(marker))
+        .map((comment) => comment.createdAt)
+        .sort()
+        .at(-1);
 }

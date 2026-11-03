@@ -39,39 +39,6 @@ export async function closePullRequest(toolkit: Toolkit, pullRequestId: string) 
     toolkit.core.debug(`closePullRequest response: ${JSON.stringify(res)}`);
 }
 
-/**
- * The latest comments on a pull request with their bodies. Kept out of
- * {@link getPullRequests}: bodies over a whole search page make GitHub time out.
- */
-export async function getPullRequestComments(toolkit: Toolkit, pullRequestId: string) {
-    const res = await toolkit.github.graphql<{
-        node: { comments: { nodes: { createdAt: string, body: string, author: { login: string, __typename: string } | null }[] } }
-    }>(/* GraphQL */ `
-        query getPullRequestComments($pullRequestId: ID!) {
-            node(id: $pullRequestId) {
-                ... on PullRequest {
-                    comments(last: 50) {
-                        nodes {
-                            createdAt
-                            body
-                            author {
-                                login
-                                __typename
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    `,
-        {
-            pullRequestId: pullRequestId
-        }
-    );
-
-    return res.node.comments.nodes;
-}
-
 export async function convertPullRequestToDraft(toolkit: Toolkit, pullRequestId: string) {
     const res = await toolkit.github.graphql(/* GraphQL */ `
         mutation convertPullRequestToDraft($pullRequestId: ID!) {
@@ -668,6 +635,21 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string, wit
                                         login
                                     }
                                     name
+                                }
+                            }
+                        }
+                        labels(first: 50) @include(if: $withActivity) {
+                            nodes {
+                                name
+                            }
+                        }
+                        labelEvents: timelineItems(last: 50, itemTypes: [LABELED_EVENT]) @include(if: $withActivity) {
+                            nodes {
+                                ... on LabeledEvent {
+                                    createdAt
+                                    label {
+                                        name
+                                    }
                                 }
                             }
                         }

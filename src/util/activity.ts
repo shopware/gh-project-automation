@@ -51,7 +51,9 @@ export type ActivityReviewThreadNode = {
 
 export type PullRequestActivity = {
     timelineItems?: { nodes: ActivityTimelineNode[] },
-    reviewThreads?: { nodes: ActivityReviewThreadNode[] }
+    reviewThreads?: { nodes: ActivityReviewThreadNode[] },
+    labelEvents?: { nodes: { createdAt: string, label?: { name: string } | null }[] },
+    labels?: { nodes: { name: string }[] }
 };
 
 function isHumanAuthor(author: ActivityAuthor): boolean {
@@ -111,12 +113,13 @@ export function lastConvertedToDraftAt(pullRequest: PullRequestActivity): string
 }
 
 /**
- * When a bot last commented with `marker` in the body, or `undefined` when none did.
+ * When `label` was last added to the pull request, or `undefined` when the fetched label
+ * events do not show it.
  */
-export function lastBotCommentAt(comments: { createdAt: string, body: string, author: ActivityAuthor }[], marker: string): string | undefined {
-    return comments
-        .filter((comment) => comment.author && !isHumanAuthor(comment.author) && comment.body.includes(marker))
-        .map((comment) => comment.createdAt)
+export function lastLabeledAt(pullRequest: PullRequestActivity, label: string): string | undefined {
+    return (pullRequest.labelEvents?.nodes ?? [])
+        .filter((node) => node.label?.name === label)
+        .map((node) => node.createdAt)
         .sort()
         .at(-1);
 }

@@ -17,7 +17,9 @@ type TestPullRequest = {
     author?: string,
     assignee?: string,
     timeline?: unknown[],
-    reviewThreads?: unknown[]
+    reviewThreads?: unknown[],
+    labels?: string[],
+    labelEvents?: { createdAt: string, label: { name: string } }[]
 };
 
 /** Every login these tests do not deliberately treat as external. */
@@ -32,11 +34,15 @@ function staleToolkit(pullRequests: TestPullRequest[], internalLogins: string[] 
     const closed: string[] = [];
     const drafted: string[] = [];
     const comments: string[] = [];
-    const labeled: number[] = [];
+    const labeled: string[] = [];
+    const unlabeled: string[] = [];
 
     (toolkit.github.rest as Record<string, unknown>).issues = {
-        addLabels: vi.fn().mockImplementation(async ({ issue_number }: { issue_number: number }) => {
-            labeled.push(issue_number);
+        addLabels: vi.fn().mockImplementation(async ({ issue_number, labels }: { issue_number: number, labels: string[] }) => {
+            labeled.push(...labels.map((label) => `${issue_number} ${label}`));
+        }),
+        removeLabel: vi.fn().mockImplementation(async ({ issue_number, name }: { issue_number: number, name: string }) => {
+            unlabeled.push(`${issue_number} ${name}`);
         }),
     };
 
@@ -60,6 +66,8 @@ function staleToolkit(pullRequests: TestPullRequest[], internalLogins: string[] 
                         closingIssuesReferences: { nodes: [] },
                         timelineItems: { nodes: pr.timeline ?? [] },
                         reviewThreads: { nodes: pr.reviewThreads ?? [] },
+                        labels: { nodes: (pr.labels ?? []).map((name) => ({ name })) },
+                        labelEvents: { nodes: pr.labelEvents ?? [] },
                     })),
                 },
             };
@@ -69,13 +77,6 @@ function staleToolkit(pullRequests: TestPullRequest[], internalLogins: string[] 
             const login = String(variables.login);
 
             return { user: { organizationVerifiedDomainEmails: internalLogins.includes(login) ? [`${login}@shopware.com`] : [] } };
-        }
-
-        if (query.includes("getPullRequestComments")) {
-            const pr = pullRequests.find((candidate) => `id-${candidate.number}` === variables.pullRequestId);
-            const nodes = (pr?.timeline ?? []).filter((node) => typeof (node as { body?: unknown }).body === "string");
-
-            return { node: { comments: { nodes } } };
         }
 
         if (query.includes("closeIssue")) {
@@ -99,7 +100,7 @@ function staleToolkit(pullRequests: TestPullRequest[], internalLogins: string[] 
         throw new Error(`unexpected query: ${query.slice(0, 60)}`);
     });
 
-    return { toolkit, closed, drafted, comments, labeled };
+    return { toolkit, closed, drafted, comments, labeled, unlabeled };
 }
 
 /** A conversion to draft as the timeline reports it. */
@@ -107,12 +108,11 @@ function convertedToDraft(at: string) {
     return { convertedAt: at };
 }
 
-/** The warning comment a previous run left. */
-function staleWarning(at: string) {
+/** The state a previous run's warning left: the label, and when it was added. */
+function warned(at: string) {
     return {
-        createdAt: at,
-        body: "<!-- stale-pull-request-warning -->\nThis draft has had no activity for 28 days.",
-        author: { login: "shopware-octo-sts-app-2", __typename: "Bot" },
+        labels: ["lifecycle/AboutToClose"],
+        labelEvents: [{ createdAt: at, label: { name: "lifecycle/AboutToClose" } }],
     };
 }
 
@@ -144,7 +144,7 @@ describe("manageOldPullRequests", () => {
         });
     });
 
-    it("converts a pull request whose only recent event was a bot to a draft instead of closing it", async () => {
+    it("warns a pull request whose only recent event was a bot: label, draft, comment", async () => {
         const { toolkit, closed, drafted, comments, labeled } = staleToolkit([{
             number: 5420,
             assignee: "vienthuong",
@@ -156,80 +156,16 @@ describe("manageOldPullRequests", () => {
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
+        expect(labeled).toEqual(["5420 lifecycle/AboutToClose"]);
         expect(drafted).toEqual(["id-5420"]);
-        expect(closed).toEqual([]);
-        expect(labeled).toEqual([]);
         expect(comments).toEqual(["id-5420"]);
+        expect(closed).toEqual([]);
         const [, commentVariables] = toolkit.github.graphql.mock.calls.find(([query]: [string]) => query.includes("addComment"));
         expect(commentVariables.body).toContain("lifecycle/DoNotClose");
     });
 
-    it("leaves pull requests labeled lifecycle/DoNotClose out of the search", async () => {
-        const { toolkit } = staleToolkit([]);
-
-        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
-
-        const [, variables] = toolkit.github.graphql.mock.calls[0];
-        expect(variables.searchQuery).toContain('-label:"lifecycle/DoNotClose"');
-        expect(variables.searchQuery).not.toContain("draft:false");
-    });
-
-    it("closes and labels a draft once a full period has passed since the warning", async () => {
+    it("warns an inactive draft without converting it again", async () => {
         const { toolkit, closed, drafted, comments, labeled } = staleToolkit([{
-            number: 17488,
-            isDraft: true,
-            assignee: "vienthuong",
-            timeline: [
-                { createdAt: OLD, author: { login: "g-volker", __typename: "User" } },
-                convertedToDraft(daysAgo(CUTOFF_DAYS + 1)),
-                staleWarning(daysAgo(CUTOFF_DAYS + 1)),
-            ],
-        }]);
-
-        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
-
-        expect(closed).toEqual(["id-17488"]);
-        expect(labeled).toEqual([17488]);
-        expect(comments).toEqual(["id-17488"]);
-        expect(drafted).toEqual([]);
-    });
-
-    it("waits after the warning until a full period has passed", async () => {
-        const { toolkit, closed, comments } = staleToolkit([{
-            number: 1,
-            isDraft: true,
-            assignee: "vienthuong",
-            timeline: [
-                { createdAt: OLD, author: { login: "someone", __typename: "User" } },
-                staleWarning(daysAgo(3)),
-            ],
-        }]);
-
-        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
-
-        expect(closed).toEqual([]);
-        expect(comments).toEqual([]);
-    });
-
-    it("keeps a draft open when a person wrote after the conversion", async () => {
-        const { toolkit, closed } = staleToolkit([{
-            number: 17488,
-            isDraft: true,
-            assignee: "vienthuong",
-            timeline: [
-                convertedToDraft(daysAgo(CUTOFF_DAYS + 5)),
-                staleWarning(daysAgo(CUTOFF_DAYS + 5)),
-                { createdAt: daysAgo(2), author: { login: "vienthuong", __typename: "User" } },
-            ],
-        }]);
-
-        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
-
-        expect(closed).toEqual([]);
-    });
-
-    it("warns an inactive draft that was opened as one instead of closing it", async () => {
-        const { toolkit, closed, drafted, comments } = staleToolkit([{
             number: 1,
             isDraft: true,
             assignee: "vienthuong",
@@ -238,51 +174,165 @@ describe("manageOldPullRequests", () => {
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
+        expect(labeled).toEqual(["1 lifecycle/AboutToClose"]);
         expect(comments).toEqual(["id-1"]);
-        expect(closed).toEqual([]);
         expect(drafted).toEqual([]);
-        const [, commentVariables] = toolkit.github.graphql.mock.calls.find(([query]: [string]) => query.includes("addComment"));
-        expect(commentVariables.body).toContain("<!-- stale-pull-request-warning -->");
-        expect(commentVariables.body).toContain("lifecycle/DoNotClose");
+        expect(closed).toEqual([]);
     });
 
-    it("warns again instead of closing when a person was active after the last warning", async () => {
-        const { toolkit, closed, comments } = staleToolkit([{
-            number: 1,
+    it("comments nothing when the warning label cannot be set", async () => {
+        const { toolkit, drafted, comments } = staleToolkit([{
+            number: 5420,
+            assignee: "vienthuong",
+            timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }],
+        }]);
+        toolkit.github.rest.issues.addLabels = vi.fn().mockRejectedValue(new Error("Resource not accessible by integration")) as never;
+
+        await expect(manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true)).rejects.toThrow("shopware/shopware#5420");
+
+        expect(drafted).toEqual([]);
+        expect(comments).toEqual([]);
+    });
+
+    it("closes a warned draft once a full period has passed since the warning, swapping the labels", async () => {
+        const { toolkit, closed, drafted, comments, labeled, unlabeled } = staleToolkit([{
+            number: 17488,
             isDraft: true,
             assignee: "vienthuong",
             timeline: [
-                staleWarning(daysAgo(CUTOFF_DAYS * 3)),
-                { createdAt: daysAgo(CUTOFF_DAYS * 2), author: { login: "someone", __typename: "User" } },
+                { createdAt: OLD, author: { login: "g-volker", __typename: "User" } },
+                convertedToDraft(daysAgo(CUTOFF_DAYS + 1)),
             ],
+            ...warned(daysAgo(CUTOFF_DAYS + 1)),
         }]);
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
+        expect(closed).toEqual(["id-17488"]);
+        expect(unlabeled).toEqual(["17488 lifecycle/AboutToClose"]);
+        expect(labeled).toEqual(["17488 lifecycle/ClosedDueToNoActivity"]);
+        expect(comments).toEqual(["id-17488"]);
+        expect(drafted).toEqual([]);
+    });
+
+    it("waits after the warning until a full period has passed", async () => {
+        const { toolkit, closed, comments, unlabeled } = staleToolkit([{
+            number: 1,
+            isDraft: true,
+            assignee: "vienthuong",
+            timeline: [{ createdAt: OLD, author: { login: "someone", __typename: "User" } }],
+            ...warned(daysAgo(3)),
+        }]);
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(closed).toEqual([]);
+        expect(comments).toEqual([]);
+        expect(unlabeled).toEqual([]);
+    });
+
+    it("withdraws the warning when a person was active after it", async () => {
+        const { toolkit, closed, comments, unlabeled } = staleToolkit([{
+            number: 17488,
+            isDraft: true,
+            assignee: "vienthuong",
+            timeline: [{ createdAt: daysAgo(2), author: { login: "vienthuong", __typename: "User" } }],
+            ...warned(daysAgo(CUTOFF_DAYS + 5)),
+        }]);
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(unlabeled).toEqual(["17488 lifecycle/AboutToClose"]);
+        expect(closed).toEqual([]);
+        expect(comments).toEqual([]);
+    });
+
+    it("withdraws the warning when the pull request was marked ready for review", async () => {
+        const { toolkit, closed, unlabeled } = staleToolkit([{
+            number: 17488,
+            assignee: "vienthuong",
+            timeline: [{ createdAt: OLD, author: { login: "vienthuong", __typename: "User" } }],
+            ...warned(daysAgo(CUTOFF_DAYS + 5)),
+        }]);
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(unlabeled).toEqual(["17488 lifecycle/AboutToClose"]);
+        expect(closed).toEqual([]);
+    });
+
+    it("withdraws the warning and does nothing else once lifecycle/DoNotClose is added", async () => {
+        const { toolkit, closed, comments, unlabeled } = staleToolkit([{
+            number: 17488,
+            isDraft: true,
+            assignee: "vienthuong",
+            timeline: [{ createdAt: OLD, author: { login: "vienthuong", __typename: "User" } }],
+            labels: ["lifecycle/AboutToClose", "lifecycle/DoNotClose"],
+            labelEvents: warned(daysAgo(CUTOFF_DAYS + 5)).labelEvents,
+        }]);
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(unlabeled).toEqual(["17488 lifecycle/AboutToClose"]);
+        expect(closed).toEqual([]);
+        expect(comments).toEqual([]);
+    });
+
+    it("never warns a pull request labeled lifecycle/DoNotClose", async () => {
+        const { toolkit, drafted, comments, labeled } = staleToolkit([{
+            number: 5420,
+            assignee: "vienthuong",
+            timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }],
+            labels: ["lifecycle/DoNotClose"],
+        }]);
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(labeled).toEqual([]);
+        expect(drafted).toEqual([]);
+        expect(comments).toEqual([]);
+    });
+
+    it("warns again after a person removed the label from an inactive draft", async () => {
+        // The labeling is still in the timeline, but without the label there is no warning.
+        const { toolkit, closed, comments, labeled } = staleToolkit([{
+            number: 1,
+            isDraft: true,
+            assignee: "vienthuong",
+            timeline: [{ createdAt: OLD, author: { login: "someone", __typename: "User" } }],
+            labelEvents: warned(daysAgo(CUTOFF_DAYS * 2)).labelEvents,
+        }]);
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(labeled).toEqual(["1 lifecycle/AboutToClose"]);
         expect(comments).toEqual(["id-1"]);
         expect(closed).toEqual([]);
     });
 
-    it("does not take a person quoting the warning for the warning itself", async () => {
+    it("skips a labeled pull request whose labeling is not in the fetched timeline", async () => {
         const { toolkit, closed, comments } = staleToolkit([{
             number: 1,
             isDraft: true,
             assignee: "vienthuong",
-            timeline: [{ ...staleWarning(OLD), author: { login: "someone", __typename: "User" } }],
+            timeline: [{ createdAt: OLD, author: { login: "someone", __typename: "User" } }],
+            labels: ["lifecycle/AboutToClose"],
         }]);
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
-        expect(comments).toEqual(["id-1"]);
         expect(closed).toEqual([]);
+        expect(comments).toEqual([]);
+        expect(toolkit.core.warning).toHaveBeenCalledWith(expect.stringContaining("shopware/shopware#1"));
     });
 
-    it("still closes a draft when the label cannot be set", async () => {
+    it("still closes and comments when the labels cannot be swapped", async () => {
         const { toolkit, closed, comments } = staleToolkit([{
             number: 17488,
             isDraft: true,
             assignee: "vienthuong",
-            timeline: [convertedToDraft(OLD), staleWarning(OLD)],
+            timeline: [convertedToDraft(OLD)],
+            ...warned(OLD),
         }]);
         toolkit.github.rest.issues.addLabels = vi.fn().mockRejectedValue(new Error("Resource not accessible by integration")) as never;
 
@@ -290,7 +340,7 @@ describe("manageOldPullRequests", () => {
 
         expect(closed).toEqual(["id-17488"]);
         expect(comments).toEqual(["id-17488"]);
-        expect(toolkit.core.warning).toHaveBeenCalledWith(expect.stringContaining("lifecycle/ClosedDueToNoActivity"));
+        expect(toolkit.core.warning).toHaveBeenCalledWith(expect.stringContaining("shopware/shopware#17488"));
     });
 
     it("leaves a pull request alone when a person wrote inside the window", async () => {
@@ -408,7 +458,7 @@ describe("manageOldPullRequests", () => {
         process.env.DRY_RUN = "true";
         const { toolkit, closed, drafted, comments, labeled } = staleToolkit([
             { number: 5420, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }] },
-            { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD), staleWarning(OLD)] },
+            { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD)], ...warned(OLD) },
         ]);
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
@@ -424,7 +474,7 @@ describe("manageOldPullRequests", () => {
     it("changes nothing when close is off", async () => {
         const { toolkit, closed, drafted } = staleToolkit([
             { number: 5420, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }] },
-            { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD), staleWarning(OLD)] },
+            { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD)], ...warned(OLD) },
         ]);
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, false);

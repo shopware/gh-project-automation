@@ -16,6 +16,8 @@ export const CLOSED_DUE_TO_NO_ACTIVITY_LABEL = "lifecycle/ClosedDueToNoActivity"
 /** Hidden in the warning comment; the next run reads it back to know the warning was given. */
 const STALE_WARNING_MARKER = "<!-- stale-pull-request-warning -->";
 
+const LIFECYCLE_DOCS_URL = "https://github.com/shopware/shopware/blob/trunk/delivery-process/pull-request-lifecycle.md#inactive-pull-requests";
+
 /**
  * manageOldPullRequests retires our own pull requests in two steps once they have been
  * inactive for `days`: first a warning, then, after another `days` without activity, it
@@ -54,11 +56,12 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
     );
     const deadline = `It will be closed if there is no further activity within the next ${days} days.\n\n`
         + `To keep it open, add the \`${DO_NOT_CLOSE_LABEL}\` label.`;
+    const docs = `\n\n[How this works](${LIFECYCLE_DOCS_URL})`;
     const parkMsg = `${STALE_WARNING_MARKER}\nThis pull request has had no activity for ${days} days and has been converted to a draft. ${deadline} `
-        + `Once you continue working on it, mark it as ready for review again.`;
-    const warnMsg = `${STALE_WARNING_MARKER}\nThis draft has had no activity for ${days} days. ${deadline}`;
+        + `Once you continue working on it, mark it as ready for review again.${docs}`;
+    const warnMsg = `${STALE_WARNING_MARKER}\nThis draft has had no activity for ${days} days. ${deadline}${docs}`;
     const closeMsg = `This pull request has been closed automatically after ${days} days without activity since the last warning. `
-        + `If you would like to continue working on it, please feel free to re-open it!`;
+        + `If you would like to continue working on it, please feel free to re-open it!${docs}`;
 
     toolkit.core.info(`Checking ${pullRequests.length} open pull request(s) opened before ${cutoff}.`);
 

@@ -13,7 +13,7 @@ export const DO_NOT_CLOSE_LABEL = "lifecycle/DoNotClose";
 export const ABOUT_TO_CLOSE_LABEL = "lifecycle/AboutToClose";
 export const CLOSED_DUE_TO_NO_ACTIVITY_LABEL = "lifecycle/ClosedDueToNoActivity";
 
-const LIFECYCLE_DOCS_URL = "https://github.com/shopware/shopware/blob/trunk/delivery-process/pull-request-lifecycle.md#inactive-pull-requests";
+const LIFECYCLE_DOCS_URL = "https://github.com/shopware/gh-project-automation/blob/main/docs/stale-pull-requests.md";
 
 /**
  * manageOldPullRequests retires our own pull requests in two steps once they have been

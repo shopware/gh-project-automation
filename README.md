@@ -5,7 +5,7 @@ This project automates various tasks for GitHub projects, streamlining workflows
 ## Features
 
 - Automated issue creation
-- Pull request management, including warning and closing inactive pull requests ([how it works](https://github.com/shopware/shopware/blob/trunk/delivery-process/pull-request-lifecycle.md#inactive-pull-requests))
+- Pull request management, including warning and closing inactive pull requests ([how it works](docs/stale-pull-requests.md))
 - Project board updates
 
 ## Usage

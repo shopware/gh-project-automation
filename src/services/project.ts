@@ -290,7 +290,7 @@ export async function markStaleIssues(toolkit: Toolkit, projectNumber: number, d
 }
 
 export async function closeStaleIssues(toolkit: Toolkit, dryRun: boolean) {
-    const DAYS_UNTIL_CLOSE = 30;
+    const DAYS_UNTIL_CLOSE = 28;
 
     const now = new Date();
     now.setDate(now.getDate() - DAYS_UNTIL_CLOSE);

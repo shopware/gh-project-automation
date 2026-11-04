@@ -5,7 +5,7 @@ This project automates various tasks for GitHub projects, streamlining workflows
 ## Features
 
 - Automated issue creation
-- Pull request management
+- Pull request management, including warning and closing inactive pull requests ([how it works](docs/stale-pull-requests.md))
 - Project board updates
 
 ## Usage

@@ -41,7 +41,8 @@ export type ActivityTimelineNode = {
     createdAt?: string,
     submittedAt?: string,
     author?: ActivityAuthor,
-    commit?: { committedDate: string, author?: { user?: { login: string } | null } | null }
+    commit?: { committedDate: string, author?: { user?: { login: string } | null } | null },
+    convertedAt?: string
 };
 
 export type ActivityReviewThreadNode = {
@@ -50,7 +51,9 @@ export type ActivityReviewThreadNode = {
 
 export type PullRequestActivity = {
     timelineItems?: { nodes: ActivityTimelineNode[] },
-    reviewThreads?: { nodes: ActivityReviewThreadNode[] }
+    reviewThreads?: { nodes: ActivityReviewThreadNode[] },
+    labelEvents?: { nodes: { createdAt: string, label?: { name: string } | null }[] },
+    labels?: { nodes: { name: string }[] }
 };
 
 function isHumanAuthor(author: ActivityAuthor): boolean {
@@ -95,4 +98,28 @@ export function lastHumanActivityAt(pullRequest: PullRequestActivity): string | 
 
     // All ISO 8601 in UTC, so lexical order is chronological.
     return timestamps.sort().at(-1);
+}
+
+/**
+ * When the pull request was last converted to a draft, by anyone, or `undefined` when it
+ * never was.
+ */
+export function lastConvertedToDraftAt(pullRequest: PullRequestActivity): string | undefined {
+    return (pullRequest.timelineItems?.nodes ?? [])
+        .map((node) => node.convertedAt)
+        .filter((at) => at !== undefined)
+        .sort()
+        .at(-1);
+}
+
+/**
+ * When `label` was last added to the pull request, or `undefined` when the fetched label
+ * events do not show it.
+ */
+export function lastLabeledAt(pullRequest: PullRequestActivity, label: string): string | undefined {
+    return (pullRequest.labelEvents?.nodes ?? [])
+        .filter((node) => node.label?.name === label)
+        .map((node) => node.createdAt)
+        .sort()
+        .at(-1);
 }

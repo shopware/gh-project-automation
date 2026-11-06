@@ -47,7 +47,7 @@ A closed pull request can be reopened at any time.
 | `lifecycle/ClosedDueToNoActivity` | Automation | Closed after a warning and another 28 days without activity. |
 
 The labels are managed in [shopware/organization](https://github.com/shopware/organization) (`labels/labels.tf`).
-In a repository not listed there, the job tries to create them on first use.
+In a repository not listed there, the job creates them on first use, including `lifecycle/DoNotClose` before the first warning.
 
 ## Configuration
 

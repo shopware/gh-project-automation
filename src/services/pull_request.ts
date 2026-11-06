@@ -62,6 +62,7 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
     toolkit.core.info(`Checking ${pullRequests.length} open pull request(s) opened before ${cutoff}.`);
 
     const counts = { warn: 0, close: 0, unwarn: 0 };
+    const reposWithDoNotClose = new Set<string>();
     const failed: string[] = [];
 
     for (const pr of pullRequests) {
@@ -184,6 +185,7 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
 
                 await addComment(toolkit, pr.id, closeMsg);
             } else {
+                await ensureDoNotCloseLabel(toolkit, issue, reposWithDoNotClose);
                 await warn(toolkit, issue, pr.id, warnMsg);
             }
         } catch (error) {
@@ -217,6 +219,35 @@ async function warn(toolkit: Toolkit, issue: IssueRef, pullRequestId: string, me
         await removeLabel(toolkit, issue, ABOUT_TO_CLOSE_LABEL);
         throw error;
     }
+}
+
+/**
+ * The warning tells people to add {@link DO_NOT_CLOSE_LABEL}, and only repositories in
+ * shopware/organization's Terraform get it from there. Description and color match it.
+ */
+async function ensureDoNotCloseLabel(toolkit: Toolkit, issue: IssueRef, ensured: Set<string>) {
+    if (ensured.has(issue.repo)) {
+        return;
+    }
+
+    try {
+        await toolkit.github.rest.issues.getLabel({ owner: issue.owner, repo: issue.repo, name: DO_NOT_CLOSE_LABEL });
+    } catch (error) {
+        if ((error as { status?: number }).status !== 404) {
+            throw error;
+        }
+
+        await toolkit.github.rest.issues.createLabel({
+            owner: issue.owner,
+            repo: issue.repo,
+            name: DO_NOT_CLOSE_LABEL,
+            color: "1CFBE8",
+            description: "Cleanup automation won't warn about or close this issue or PR for inactivity.",
+        });
+        toolkit.core.info(`Created ${DO_NOT_CLOSE_LABEL} in ${issue.owner}/${issue.repo}.`);
+    }
+
+    ensured.add(issue.repo);
 }
 
 /** Adding a label by name creates it in a repository that lacks it. */

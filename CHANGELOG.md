@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.20.1](https://github.com/shopware/gh-project-automation/compare/v1.20.0...v1.20.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* create lifecycle labels and keep their color in line ([#111](https://github.com/shopware/gh-project-automation/issues/111)) ([89bace2](https://github.com/shopware/gh-project-automation/commit/89bace24ab0ece5660877446d8ff863879560d00))
+* warn stale pull requests without converting them to drafts ([#109](https://github.com/shopware/gh-project-automation/issues/109)) ([b97011a](https://github.com/shopware/gh-project-automation/commit/b97011a5202f5673a7fe4b4ae7c61b25fb8bfcd3))
+
 ## [1.20.0](https://github.com/shopware/gh-project-automation/compare/v1.19.0...v1.20.0) (2026-11-04)
 
 

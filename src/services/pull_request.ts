@@ -12,6 +12,13 @@ export const DO_NOT_CLOSE_LABEL = "lifecycle/DoNotClose";
 export const ABOUT_TO_CLOSE_LABEL = "lifecycle/AboutToClose";
 export const CLOSED_DUE_TO_NO_ACTIVITY_LABEL = "lifecycle/ClosedDueToNoActivity";
 
+/** Same color and descriptions as shopware/organization's Terraform, which covers only some repositories. */
+const LIFECYCLE_LABELS = [
+    { name: DO_NOT_CLOSE_LABEL, color: "1cfbe8", description: "Cleanup automation won't warn about or close this issue or PR for inactivity." },
+    { name: ABOUT_TO_CLOSE_LABEL, color: "1cfbe8", description: "Will be closed automatically unless there is activity within 28 days." },
+    { name: CLOSED_DUE_TO_NO_ACTIVITY_LABEL, color: "1cfbe8", description: "Closed automatically after a warning and another 28 days without activity." },
+];
+
 const LIFECYCLE_DOCS_URL = "https://github.com/shopware/gh-project-automation/blob/main/docs/stale-pull-requests.md";
 
 /**
@@ -62,6 +69,7 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
     toolkit.core.info(`Checking ${pullRequests.length} open pull request(s) opened before ${cutoff}.`);
 
     const counts = { warn: 0, close: 0, unwarn: 0 };
+    const reposWithLabels = new Set<string>();
     const failed: string[] = [];
 
     for (const pr of pullRequests) {
@@ -171,6 +179,8 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
         }
 
         try {
+            await ensureLifecycleLabels(toolkit, issue, reposWithLabels);
+
             if (action === "close") {
                 await closePullRequest(toolkit, pr.id);
 
@@ -217,6 +227,39 @@ async function warn(toolkit: Toolkit, issue: IssueRef, pullRequestId: string, me
         await removeLabel(toolkit, issue, ABOUT_TO_CLOSE_LABEL);
         throw error;
     }
+}
+
+/**
+ * The warning tells people to add {@link DO_NOT_CLOSE_LABEL}, so it has to exist. Labels the
+ * job adds by name would otherwise be created grey and without a description.
+ */
+async function ensureLifecycleLabels(toolkit: Toolkit, issue: IssueRef, ensured: Set<string>) {
+    if (ensured.has(issue.repo)) {
+        return;
+    }
+
+    for (const label of LIFECYCLE_LABELS) {
+        const target = { owner: issue.owner, repo: issue.repo, name: label.name };
+        let existing: { color: string, description: string | null } | undefined;
+
+        try {
+            existing = (await toolkit.github.rest.issues.getLabel(target)).data;
+        } catch (error) {
+            if ((error as { status?: number }).status !== 404) {
+                throw error;
+            }
+        }
+
+        if (existing === undefined) {
+            await toolkit.github.rest.issues.createLabel({ ...target, color: label.color, description: label.description });
+            toolkit.core.info(`Created ${label.name} in ${issue.owner}/${issue.repo}.`);
+        } else if (existing.color.toLowerCase() !== label.color || existing.description !== label.description) {
+            await toolkit.github.rest.issues.updateLabel({ ...target, color: label.color, description: label.description });
+            toolkit.core.info(`Updated ${label.name} in ${issue.owner}/${issue.repo}.`);
+        }
+    }
+
+    ensured.add(issue.repo);
 }
 
 /** Adding a label by name creates it in a repository that lacks it. */

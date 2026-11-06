@@ -22,6 +22,13 @@ type TestPullRequest = {
     labelEvents?: { createdAt: string, label: { name: string } }[]
 };
 
+/** The lifecycle labels as shopware/organization's Terraform defines them. */
+const LABEL_STYLES: Record<string, { color: string, description: string }> = {
+    "lifecycle/DoNotClose": { color: "1cfbe8", description: "Cleanup automation won't warn about or close this issue or PR for inactivity." },
+    "lifecycle/AboutToClose": { color: "1cfbe8", description: "Will be closed automatically unless there is activity within 28 days." },
+    "lifecycle/ClosedDueToNoActivity": { color: "1cfbe8", description: "Closed automatically after a warning and another 28 days without activity." },
+};
+
 /** Every login these tests do not deliberately treat as external. */
 const INTERNAL = ["vienthuong", "mitelg", "h1k3r", "someone"];
 
@@ -44,6 +51,9 @@ function staleToolkit(pullRequests: TestPullRequest[], internalLogins: string[] 
         removeLabel: vi.fn().mockImplementation(async ({ issue_number, name }: { issue_number: number, name: string }) => {
             unlabeled.push(`${issue_number} ${name}`);
         }),
+        getLabel: vi.fn().mockImplementation(async ({ name }: { name: string }) => ({ data: { name, ...LABEL_STYLES[name] } })),
+        createLabel: vi.fn().mockResolvedValue({}),
+        updateLabel: vi.fn().mockResolvedValue({}),
     };
 
     toolkit.github.graphql = vi.fn().mockImplementation(async (query: string, variables: Record<string, unknown>) => {
@@ -163,6 +173,49 @@ describe("manageOldPullRequests", () => {
         expect(closed).toEqual([]);
         const [, commentVariables] = toolkit.github.graphql.mock.calls.find(([query]: [string]) => query.includes("addComment"));
         expect(commentVariables.body).toContain("lifecycle/DoNotClose");
+    });
+
+    it("creates missing lifecycle labels once per repository, with color and description", async () => {
+        // The warning asks people to add lifecycle/DoNotClose, and shopware/SwagAnalytics had none.
+        const { toolkit, comments } = staleToolkit([
+            { number: 1, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "someone", __typename: "User" } }] },
+            { number: 2, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "someone", __typename: "User" } }] },
+        ]);
+        toolkit.github.rest.issues.getLabel = vi.fn().mockRejectedValue(Object.assign(new Error("Not Found"), { status: 404 })) as never;
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(toolkit.github.rest.issues.createLabel).toHaveBeenCalledTimes(3);
+        for (const [name, style] of Object.entries(LABEL_STYLES)) {
+            expect(toolkit.github.rest.issues.createLabel).toHaveBeenCalledWith({ owner: "shopware", repo: "shopware", name, ...style });
+        }
+        expect(comments).toEqual(["id-1", "id-2"]);
+    });
+
+    it("fixes a lifecycle label GitHub created grey when the job added it by name", async () => {
+        const { toolkit } = staleToolkit([
+            { number: 1, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "someone", __typename: "User" } }] },
+        ]);
+        toolkit.github.rest.issues.getLabel = vi.fn().mockImplementation(async ({ name }: { name: string }) => ({
+            data: name === "lifecycle/AboutToClose" ? { name, color: "ededed", description: null } : { name, ...LABEL_STYLES[name] },
+        })) as never;
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(toolkit.github.rest.issues.createLabel).not.toHaveBeenCalled();
+        expect(toolkit.github.rest.issues.updateLabel).toHaveBeenCalledTimes(1);
+        expect(toolkit.github.rest.issues.updateLabel).toHaveBeenCalledWith({ owner: "shopware", repo: "shopware", name: "lifecycle/AboutToClose", ...LABEL_STYLES["lifecycle/AboutToClose"] });
+    });
+
+    it("leaves lifecycle labels alone that already match", async () => {
+        const { toolkit } = staleToolkit([
+            { number: 1, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "someone", __typename: "User" } }] },
+        ]);
+
+        await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+
+        expect(toolkit.github.rest.issues.createLabel).not.toHaveBeenCalled();
+        expect(toolkit.github.rest.issues.updateLabel).not.toHaveBeenCalled();
     });
 
     it("takes the label back when the warning comment fails", async () => {

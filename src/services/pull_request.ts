@@ -1,7 +1,6 @@
 import {
     addComment,
     closePullRequest,
-    convertPullRequestToDraft,
     getPullRequests,
     getVerifiedDomainEmails
 } from "../api";
@@ -21,11 +20,11 @@ const LIFECYCLE_DOCS_URL = "https://github.com/shopware/gh-project-automation/bl
  * closes them and labels them {@link CLOSED_DUE_TO_NO_ACTIVITY_LABEL}. Closing without a
  * warning took approved pull requests that only nobody had merged yet.
  *
- * The warning is {@link ABOUT_TO_CLOSE_LABEL} plus a comment; a pull request that is not a
- * draft yet is also converted to one. The label is the state: the second step counts from
- * when it was added, and it is removed once a person is active again or the pull request
- * gets {@link DO_NOT_CLOSE_LABEL}, which keeps it out of both steps. Removing the label by
- * hand withdraws the warning.
+ * The warning is {@link ABOUT_TO_CLOSE_LABEL} plus a comment. It does not convert the pull
+ * request to a draft: `convertPullRequestToDraft` is not accessible to the GitHub App this
+ * runs as. The label is the state: the second step counts from when it was added, and it is
+ * removed once a person is active again or the pull request gets {@link DO_NOT_CLOSE_LABEL},
+ * which keeps it out of both steps. Removing the label by hand withdraws the warning.
  *
  * Inactivity is the age of the last human event on the pull request, not GitHub's
  * `updated_at`. Searching on `updated:<` misses exactly the pull requests this is meant to
@@ -56,15 +55,13 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
     const deadline = `It will be closed if there is no further activity within the next ${days} days.\n\n`
         + `To keep it open, add the \`${DO_NOT_CLOSE_LABEL}\` label.`;
     const docs = `\n\n[How this works](${LIFECYCLE_DOCS_URL})`;
-    const parkMsg = `This pull request has had no activity for ${days} days and has been converted to a draft. ${deadline} `
-        + `Once you continue working on it, mark it as ready for review again.${docs}`;
-    const warnMsg = `This draft has had no activity for ${days} days. ${deadline}${docs}`;
+    const warnMsg = `This pull request has had no activity for ${days} days. ${deadline}${docs}`;
     const closeMsg = `This pull request has been closed automatically after ${days} days without activity since the last warning. `
         + `If you would like to continue working on it, please feel free to re-open it!${docs}`;
 
     toolkit.core.info(`Checking ${pullRequests.length} open pull request(s) opened before ${cutoff}.`);
 
-    const counts = { park: 0, warn: 0, close: 0, unwarn: 0 };
+    const counts = { warn: 0, close: 0, unwarn: 0 };
     const failed: string[] = [];
 
     for (const pr of pullRequests) {
@@ -87,9 +84,8 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
             continue;
         }
 
-        // A warned pull request is always a draft, so one that is not was marked ready for review.
         const withdrawn = warnedAt !== undefined
-            && (labels.includes(DO_NOT_CLOSE_LABEL) || !pr.isDraft || (humanActivity !== undefined && humanActivity > warnedAt));
+            && (labels.includes(DO_NOT_CLOSE_LABEL) || (humanActivity !== undefined && humanActivity > warnedAt));
 
         if (withdrawn) {
             toolkit.core.info(`${name} is no longer about to close.`);
@@ -158,7 +154,7 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
             continue; // No verified domain emails found for the assignee, abort.
         }
 
-        const action = warnedAt !== undefined ? "close" : pr.isDraft ? "warn" : "park";
+        const action = warnedAt !== undefined ? "close" : "warn";
 
         toolkit.core.info(`${name} has been inactive since ${lastActivity ?? "it was opened"}.`);
 
@@ -188,14 +184,7 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
 
                 await addComment(toolkit, pr.id, closeMsg);
             } else {
-                // The label is the state the next run reads, so nothing else happens without it.
-                await addLabel(toolkit, issue, ABOUT_TO_CLOSE_LABEL);
-
-                if (action === "park") {
-                    await convertPullRequestToDraft(toolkit, pr.id);
-                }
-
-                await addComment(toolkit, pr.id, action === "park" ? parkMsg : warnMsg);
+                await warn(toolkit, issue, pr.id, warnMsg);
             }
         } catch (error) {
             toolkit.core.error(`Could not ${action} ${name}: ${error}`);
@@ -205,8 +194,7 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
 
     if (close) {
         const verb = isDryRun() ? "Would have" : "Have";
-        toolkit.core.info(`${verb} converted ${counts.park} pull request(s) to a draft, warned ${counts.warn} draft(s), `
-            + `closed ${counts.close} and withdrawn ${counts.unwarn} warning(s).`);
+        toolkit.core.info(`${verb} warned ${counts.warn} pull request(s), closed ${counts.close} and withdrawn ${counts.unwarn} warning(s).`);
     }
 
     if (failed.length > 0) {
@@ -215,6 +203,21 @@ export async function manageOldPullRequests(toolkit: Toolkit, organization: stri
 }
 
 type IssueRef = { owner: string, repo: string, issue_number: number };
+
+/**
+ * The label is the state the next run reads, so it goes first; if the comment then fails,
+ * the label is taken back, so the pull request is never counted as warned without being told.
+ */
+async function warn(toolkit: Toolkit, issue: IssueRef, pullRequestId: string, message: string) {
+    await addLabel(toolkit, issue, ABOUT_TO_CLOSE_LABEL);
+
+    try {
+        await addComment(toolkit, pullRequestId, message);
+    } catch (error) {
+        await removeLabel(toolkit, issue, ABOUT_TO_CLOSE_LABEL);
+        throw error;
+    }
+}
 
 /** Adding a label by name creates it in a repository that lacks it. */
 async function addLabel(toolkit: Toolkit, issue: IssueRef, label: string) {

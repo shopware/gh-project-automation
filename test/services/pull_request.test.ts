@@ -144,7 +144,8 @@ describe("manageOldPullRequests", () => {
         });
     });
 
-    it("warns a pull request whose only recent event was a bot: label, draft, comment", async () => {
+    it("warns a pull request whose only recent event was a bot, without converting it to a draft", async () => {
+        // convertPullRequestToDraft answers "Resource not accessible by integration" for the app.
         const { toolkit, closed, drafted, comments, labeled } = staleToolkit([{
             number: 5420,
             assignee: "vienthuong",
@@ -157,11 +158,32 @@ describe("manageOldPullRequests", () => {
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
         expect(labeled).toEqual(["5420 lifecycle/AboutToClose"]);
-        expect(drafted).toEqual(["id-5420"]);
         expect(comments).toEqual(["id-5420"]);
+        expect(drafted).toEqual([]);
         expect(closed).toEqual([]);
         const [, commentVariables] = toolkit.github.graphql.mock.calls.find(([query]: [string]) => query.includes("addComment"));
         expect(commentVariables.body).toContain("lifecycle/DoNotClose");
+    });
+
+    it("takes the label back when the warning comment fails", async () => {
+        const { toolkit, labeled, unlabeled } = staleToolkit([{
+            number: 5420,
+            assignee: "vienthuong",
+            timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }],
+        }]);
+        const graphql = toolkit.github.graphql.getMockImplementation();
+        toolkit.github.graphql = vi.fn().mockImplementation(async (query: string, variables: Record<string, unknown>) => {
+            if (query.includes("addComment")) {
+                throw new Error("Resource not accessible by integration");
+            }
+
+            return graphql!(query, variables);
+        });
+
+        await expect(manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true)).rejects.toThrow("shopware/shopware#5420");
+
+        expect(labeled).toEqual(["5420 lifecycle/AboutToClose"]);
+        expect(unlabeled).toEqual(["5420 lifecycle/AboutToClose"]);
     });
 
     it("warns an inactive draft without converting it again", async () => {
@@ -247,7 +269,7 @@ describe("manageOldPullRequests", () => {
         expect(comments).toEqual([]);
     });
 
-    it("withdraws the warning when the pull request was marked ready for review", async () => {
+    it("closes a warned pull request that is not a draft", async () => {
         const { toolkit, closed, unlabeled } = staleToolkit([{
             number: 17488,
             assignee: "vienthuong",
@@ -257,8 +279,8 @@ describe("manageOldPullRequests", () => {
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
+        expect(closed).toEqual(["id-17488"]);
         expect(unlabeled).toEqual(["17488 lifecycle/AboutToClose"]);
-        expect(closed).toEqual([]);
     });
 
     it("withdraws the warning and does nothing else once lifecycle/DoNotClose is added", async () => {
@@ -344,7 +366,7 @@ describe("manageOldPullRequests", () => {
     });
 
     it("leaves a pull request alone when a person wrote inside the window", async () => {
-        const { toolkit, drafted } = staleToolkit([{
+        const { toolkit, labeled } = staleToolkit([{
             number: 18745,
             assignee: "h1k3r",
             timeline: [{ createdAt: daysAgo(3), author: { login: "h1k3r", __typename: "User" } }],
@@ -352,11 +374,11 @@ describe("manageOldPullRequests", () => {
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
-        expect(drafted).toEqual([]);
+        expect(labeled).toEqual([]);
     });
 
     it("counts a reply inside a review thread as activity", async () => {
-        const { toolkit, drafted } = staleToolkit([{
+        const { toolkit, labeled } = staleToolkit([{
             number: 16259,
             assignee: "mitelg",
             timeline: [{ submittedAt: OLD, author: { login: "keulinho", __typename: "User" } }],
@@ -365,27 +387,27 @@ describe("manageOldPullRequests", () => {
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
-        expect(drafted).toEqual([]);
+        expect(labeled).toEqual([]);
     });
 
     it("still skips a pull request without an assignee", async () => {
         // The gate that keeps this job off community contributions stays where it was.
-        const { toolkit, drafted } = staleToolkit([{ number: 9265, timeline: [{ createdAt: OLD, author: { login: "wexoag", __typename: "User" } }] }]);
+        const { toolkit, labeled } = staleToolkit([{ number: 9265, timeline: [{ createdAt: OLD, author: { login: "wexoag", __typename: "User" } }] }]);
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
-        expect(drafted).toEqual([]);
+        expect(labeled).toEqual([]);
     });
 
     it("still skips a pull request whose assignee has no verified organization email", async () => {
-        const { toolkit, drafted } = staleToolkit(
+        const { toolkit, labeled } = staleToolkit(
             [{ number: 9265, author: "someone", assignee: "wexoag", timeline: [{ createdAt: OLD, author: { login: "wexoag", __typename: "User" } }] }],
             ["someone"],
         );
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
-        expect(drafted).toEqual([]);
+        expect(labeled).toEqual([]);
     });
 
     it("never closes a community contribution, even with a maintainer assigned", async () => {
@@ -393,7 +415,7 @@ describe("manageOldPullRequests", () => {
         // measure put shopware/shopware#16259, #11516, #5420 and #13970 up for closing:
         // all external contributions, all assigned to one of us, which is exactly the
         // handling we ask for.
-        const { toolkit, drafted, comments } = staleToolkit([{
+        const { toolkit, labeled, comments } = staleToolkit([{
             number: 16259,
             author: "gecolay",
             assignee: "mitelg",
@@ -402,12 +424,12 @@ describe("manageOldPullRequests", () => {
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
-        expect(drafted).toEqual([]);
+        expect(labeled).toEqual([]);
         expect(comments).toEqual([]);
     });
 
     it("skips an app-authored pull request without asking for its emails", async () => {
-        const { toolkit, drafted } = staleToolkit([{
+        const { toolkit, labeled } = staleToolkit([{
             number: 2,
             author: "renovate",
             assignee: "mitelg",
@@ -416,7 +438,7 @@ describe("manageOldPullRequests", () => {
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
-        expect(drafted).toEqual([]);
+        expect(labeled).toEqual([]);
         expect(toolkit.github.graphql.mock.calls.some(([query]: [string]) => query.includes("getVerifiedDomainEmails"))).toBe(false);
     });
 
@@ -456,7 +478,7 @@ describe("manageOldPullRequests", () => {
 
     it("changes nothing on a dry run", async () => {
         process.env.DRY_RUN = "true";
-        const { toolkit, closed, drafted, comments, labeled } = staleToolkit([
+        const { toolkit, closed, comments, labeled } = staleToolkit([
             { number: 5420, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }] },
             { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD)], ...warned(OLD) },
         ]);
@@ -464,15 +486,14 @@ describe("manageOldPullRequests", () => {
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
 
         expect(closed).toEqual([]);
-        expect(drafted).toEqual([]);
         expect(comments).toEqual([]);
         expect(labeled).toEqual([]);
-        expect(toolkit.core.info).toHaveBeenCalledWith(expect.stringContaining("[DRY_RUN]\tpark"));
+        expect(toolkit.core.info).toHaveBeenCalledWith(expect.stringContaining("[DRY_RUN]\twarn"));
         expect(toolkit.core.info).toHaveBeenCalledWith(expect.stringContaining("[DRY_RUN]\tclose"));
     });
 
     it("changes nothing when close is off", async () => {
-        const { toolkit, closed, drafted } = staleToolkit([
+        const { toolkit, closed, labeled } = staleToolkit([
             { number: 5420, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }] },
             { number: 17488, isDraft: true, assignee: "vienthuong", timeline: [convertedToDraft(OLD)], ...warned(OLD) },
         ]);
@@ -480,11 +501,11 @@ describe("manageOldPullRequests", () => {
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, false);
 
         expect(closed).toEqual([]);
-        expect(drafted).toEqual([]);
+        expect(labeled).toEqual([]);
     });
 
     it("skips repositories on the exclude list", async () => {
-        const { toolkit, drafted } = staleToolkit([{
+        const { toolkit, labeled } = staleToolkit([{
             number: 5420,
             assignee: "vienthuong",
             timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }],
@@ -492,6 +513,6 @@ describe("manageOldPullRequests", () => {
 
         await manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true, ["shopware"]);
 
-        expect(drafted).toEqual([]);
+        expect(labeled).toEqual([]);
     });
 });

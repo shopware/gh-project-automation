@@ -22,17 +22,16 @@ GitHub's "updated" date is not used, because label, milestone and bot changes mo
 ## Warning and closing
 
 1. **Warning:** after 28 days without activity, the pull request gets the `lifecycle/AboutToClose` label and a comment.
-   If it is not a draft yet, it is also converted to one.
 2. **Closing:** with no activity in the 28 days after the label was added, it is closed and gets a comment.
    `lifecycle/AboutToClose` is replaced by `lifecycle/ClosedDueToNoActivity`.
 
-Drafts are handled the same way, whoever created them.
+Drafts and ready pull requests are handled the same way.
 For a draft, the 28 days start at its latest conversion to draft at the earliest.
+The job does not convert pull requests to drafts itself.
 
 The warning is withdrawn, and `lifecycle/AboutToClose` removed, as soon as one of these happens:
 
 - someone is active on the pull request,
-- it is marked as ready for review,
 - it gets the `lifecycle/DoNotClose` label, which also excludes it from both steps for good, or
 - someone removes `lifecycle/AboutToClose` by hand.
 

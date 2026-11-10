@@ -10,7 +10,7 @@ This project automates various tasks for GitHub projects, streamlining workflows
 
 ## Usage
 
-WIP
+- [External contributions: labeling and Slack notifications](docs/external-contributions.md)
 
 ## Development
 

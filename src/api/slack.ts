@@ -37,6 +37,10 @@ export class SlackClient {
         return null;
     }
 
+    async postToChannel(channel: string, text: string): Promise<void> {
+        await this.webClient.chat.postMessage({ channel, text, unfurl_links: false });
+    }
+
     async sendIMToUser(userId: string, message: string): Promise<void> {
         await this.webClient.chat.postMessage({
             channel: userId,

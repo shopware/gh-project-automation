@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.0](https://github.com/shopware/gh-project-automation/compare/v1.20.1...v1.21.0) (2026-11-10)
+
+
+### Features
+
+* label external issues and pull requests and notify Slack about them ([#115](https://github.com/shopware/gh-project-automation/issues/115)) ([329d8ec](https://github.com/shopware/gh-project-automation/commit/329d8ec3719cd2aaaa83c6c44c8c9d69e81ce1b9))
+
 ## [1.20.1](https://github.com/shopware/gh-project-automation/compare/v1.20.0...v1.20.1) (2026-11-06)
 
 

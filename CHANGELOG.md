@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.1](https://github.com/shopware/gh-project-automation/compare/v1.21.0...v1.21.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* retry the stale pull request search on server errors ([#112](https://github.com/shopware/gh-project-automation/issues/112)) ([e6aef33](https://github.com/shopware/gh-project-automation/commit/e6aef33a05721afb9f4bf35f69601cd9a20a981b))
+
 ## [1.21.0](https://github.com/shopware/gh-project-automation/compare/v1.20.1...v1.21.0) (2026-11-10)
 
 

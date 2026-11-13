@@ -151,6 +151,66 @@ describe("manageOldPullRequests", () => {
 
             expect(variables.searchQuery).toContain("created:<");
             expect(variables.searchQuery).not.toContain("updated:<");
+            expect(variables.pageSize).toBe(25);
+        });
+    });
+
+    describe("when GitHub answers the search with a server error", () => {
+        beforeEach(() => {
+            vi.useFakeTimers();
+        });
+
+        afterEach(() => {
+            vi.useRealTimers();
+        });
+
+        function failingSearch(status: number, failures: number) {
+            const { toolkit, comments } = staleToolkit([
+                { number: 5420, assignee: "vienthuong", timeline: [{ createdAt: OLD, author: { login: "g-volker", __typename: "User" } }] },
+            ]);
+            const graphql = toolkit.github.graphql.getMockImplementation()!;
+            let failed = 0;
+
+            toolkit.github.graphql = vi.fn().mockImplementation(async (query: string, variables: Record<string, unknown>) => {
+                if (query.includes("findPullRequests") && failed < failures) {
+                    ++failed;
+                    throw Object.assign(new Error("Unicorn!"), { status });
+                }
+
+                return graphql(query, variables);
+            });
+
+            return { toolkit, comments };
+        }
+
+        it("retries and carries on", async () => {
+            const { toolkit, comments } = failingSearch(504, 2);
+
+            const run = manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+            await vi.runAllTimersAsync();
+            await run;
+
+            expect(comments).toEqual(["id-5420"]);
+            expect(toolkit.core.warning).toHaveBeenCalledWith(expect.stringContaining("504"));
+        });
+
+        it("gives up after the last retry", async () => {
+            const { toolkit, comments } = failingSearch(502, 4);
+
+            const run = manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true);
+            const outcome = expect(run).rejects.toThrow("Unicorn!");
+            await vi.runAllTimersAsync();
+            await outcome;
+
+            expect(comments).toEqual([]);
+        });
+
+        it("does not retry a client error", async () => {
+            const { toolkit } = failingSearch(403, 1);
+
+            await expect(manageOldPullRequests(toolkit, "shopware", CUTOFF_DAYS, true)).rejects.toThrow("Unicorn!");
+
+            expect(toolkit.core.warning).not.toHaveBeenCalled();
         });
     });
 

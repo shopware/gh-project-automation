@@ -584,9 +584,9 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string, wit
                 },
                 nodes: PullRequestNode[]
             }
-        } = await toolkit.github.graphql(/* GraphQL */ `
-        query findPullRequests($searchQuery: String!, $after: String, $withActivity: Boolean!) {
-            search(query: $searchQuery, type: ISSUE, first: 50, after: $after) {
+        } = await retryOnServerError(toolkit, () => toolkit.github.graphql(/* GraphQL */ `
+        query findPullRequests($searchQuery: String!, $after: String, $withActivity: Boolean!, $pageSize: Int!) {
+            search(query: $searchQuery, type: ISSUE, first: $pageSize, after: $after) {
                 pageInfo {
                     hasNextPage
                     endCursor
@@ -704,14 +704,41 @@ export async function getPullRequests(toolkit: Toolkit, searchQuery: string, wit
             {
                 searchQuery,
                 after,
-                withActivity
-            });
+                withActivity,
+                // The activity fields make a full page of 50 heavy enough for GitHub to time out.
+                pageSize: withActivity ? 25 : 50
+            }));
 
         pullRequests.push(...page.search.nodes);
         after = page.search.pageInfo.hasNextPage ? page.search.pageInfo.endCursor ?? undefined : undefined;
     } while (after);
 
     return pullRequests;
+}
+
+const SERVER_ERROR_RETRY_DELAYS_MS = [5_000, 15_000, 45_000];
+
+/**
+ * Retries a request GitHub answered with a 5xx, which happens to heavy search queries now
+ * and then and passes on its own: a 504 on 2026-11-09 failed a whole stale pull request run.
+ */
+async function retryOnServerError<T>(toolkit: Toolkit, request: () => Promise<T>): Promise<T> {
+    for (const delay of SERVER_ERROR_RETRY_DELAYS_MS) {
+        try {
+            return await request();
+        } catch (error) {
+            const status = (error as { status?: number }).status;
+
+            if (status === undefined || status < 500) {
+                throw error;
+            }
+
+            toolkit.core.warning(`GitHub answered ${status}, retrying in ${delay / 1000}s.`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+    }
+
+    return request();
 }
 
 export async function addComment(toolkit: Toolkit, issueId: string, commentBody: string): Promise<GitHubComment> {

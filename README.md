@@ -11,6 +11,7 @@ This project automates various tasks for GitHub projects, streamlining workflows
 ## Usage
 
 - [External contributions: labeling and Slack notifications](docs/external-contributions.md)
+- [Project intake status: keep new board items in the intake column](docs/project-intake-status.md)
 
 ## Development
 
